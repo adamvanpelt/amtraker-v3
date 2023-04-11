@@ -504,7 +504,16 @@ Bun.serve({
       console.log("all trains");
       const trains = amtrakerCache.getTrains();
       const trainIDs = Object.keys(trains).flatMap((trainNum) =>
-        trains[trainNum].map((train) => train.trainID)
+        trains[trainNum].map((train) => {
+          const trainOriginDate = new Date(train.stations[0].schDep);
+
+          return `${train.trainNum}-${
+            trainOriginDate.getMonth() + 1
+          }-${trainOriginDate.getDate()}-${trainOriginDate
+            .getFullYear()
+            .toString()
+            .slice(-2)}`;
+        })
       );
       return new Response(JSON.stringify(trainIDs), {
         headers: {

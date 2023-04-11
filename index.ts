@@ -467,9 +467,11 @@ updateTrains();
 schedule.scheduleJob("*/3 * * * *", updateTrains);
 
 Bun.serve({
-  port: 80,
+  port: 3001,
   fetch(request) {
-    let url = request.url.split("http://0.0.0.0")[1];
+    let url = request.url.replace(":3001", "").split("http://0.0.0.0")[1];
+
+    console.log(request.url);
 
     if (url.startsWith("/v2")) {
       url = url.replace("/v2", "/v3");
@@ -491,6 +493,20 @@ Bun.serve({
 
     if (url === "/v3/stale") {
       return new Response(JSON.stringify(staleData), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
+    }
+
+    if (url.startsWith("/v3/ids")) {
+      console.log("all trains");
+      const trains = amtrakerCache.getTrains();
+      const trainIDs = Object.keys(trains).flatMap((trainNum) =>
+        trains[trainNum].map((train) => train.trainID)
+      );
+      return new Response(JSON.stringify(trainIDs), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

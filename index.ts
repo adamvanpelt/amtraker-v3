@@ -538,6 +538,19 @@ Bun.serve({
         });
       }
 
+      if (trainNum === "arr") {
+        console.log("all trains in an array");
+        return new Response(
+          JSON.stringify(Object.values(trains).flatMap((n) => n)),
+          {
+            headers: {
+              "Access-Control-Allow-Origin": "*", // CORS
+              "content-type": "application/json",
+            },
+          }
+        );
+      }
+
       console.log("train num", trainNum);
 
       if (trainNum.split("-").length === 2) {

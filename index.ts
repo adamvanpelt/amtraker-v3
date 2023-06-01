@@ -541,7 +541,9 @@ Bun.serve({
       if (trainNum === "arr") {
         console.log("all trains in an array");
         return new Response(
-          JSON.stringify(Object.values(trains).flatMap((n) => n)),
+          JSON.stringify({
+            0: Object.values(trains).flatMap((n) => n),
+          }),
           {
             headers: {
               "Access-Control-Allow-Origin": "*", // CORS

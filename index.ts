@@ -32,6 +32,7 @@ const publicKey = "69af143c-e8cf-47f8-bf09-fc1f61e5cc33";
 const masterSegment = 88;
 
 const amtrakerCache = new cache();
+let decryptedTrainData = {};
 
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
@@ -57,7 +58,10 @@ const fetchTrainsForCleaning = async () => {
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
 
-  return JSON.parse(decrypt(mainContent, privateKey)).features;
+  const decryptedData = JSON.parse(decrypt(mainContent, privateKey));
+  decryptedTrainData = decryptedData;
+
+  return decryptedData.features;
 };
 
 const fetchStationsForCleaning = async () => {
@@ -489,6 +493,15 @@ Bun.serve({
 
     if (url === "/v3") {
       return Response.redirect("/v3/trains", 301);
+    }
+
+    if (url === "/v3/raw") {
+      return new Response(JSON.stringify(decryptedTrainData), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
     }
 
     if (url === "/v3/stale") {

@@ -499,6 +499,15 @@ Bun.serve({
       return Response.redirect("/v3/trains", 301);
     }
 
+    if (url === " /v3/shitsfuckedlmao") {
+      return new Response(JSON.stringify(shitsFucked), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
+    }
+
     if (url === "/v3/raw") {
       return new Response(JSON.stringify(decryptedTrainData), {
         headers: {

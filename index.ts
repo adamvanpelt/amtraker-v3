@@ -22,6 +22,8 @@ let staleData = {
   stale: false,
 };
 
+let shitsFucked = false;
+
 const trainUrl =
   "https://maps.amtrak.com/services/MapDataService/trains/getTrainsData";
 const stationUrl =
@@ -299,6 +301,7 @@ const parseRawStation = (rawStation: RawStation) => {
 const updateTrains = async () => {
   let stations: StationResponse = {};
   console.log("Updating trains...");
+  shitsFucked = false;
   fetchStationsForCleaning()
     .then((stationData) => {
       stationData.forEach((station) => {
@@ -463,6 +466,7 @@ const updateTrains = async () => {
     })
     .catch((e) => {
       console.log("Error fetching station data:", e);
+      shitsFucked = true;
     });
 };
 

@@ -500,7 +500,7 @@ Bun.serve({
     }
 
     if (url === " /v3/shitsfuckedlmao") {
-      return new Response(JSON.stringify(shitsFucked), {
+      return new Response(shitsFucked.toString(), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

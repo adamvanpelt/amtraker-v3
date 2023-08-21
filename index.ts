@@ -499,7 +499,7 @@ Bun.serve({
       return Response.redirect("/v3/trains", 301);
     }
 
-    if (url === " /v3/shitsfuckedlmao") {
+    if (url === "/v3/shitsfuckedlmao") {
       return new Response(shitsFucked.toString(), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS

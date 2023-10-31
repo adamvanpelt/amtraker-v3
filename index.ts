@@ -81,6 +81,8 @@ const fetchStationsForCleaning = async () => {
 };
 
 const parseDate = (badDate: string | null, code: string | null) => {
+  if (code == null) code = "America/New_York";
+
   if (badDate == null || code == null) return null;
 
   //first is standard time, second is daylight savings
@@ -114,8 +116,8 @@ const parseDate = (badDate: string | null, code: string | null) => {
     }
 
     if (HMS[0] == 24) {
-      HMS[0] = 0;
-      MDY[1] += 1; //if the hour is 24, it's actually 0 on the next day
+      HMS[0] = 12;
+      //edge case for 12:00pm - 12:59pm
     }
 
     const month = MDY[0].toString().padStart(2, "0");

@@ -1,6 +1,6 @@
 import * as crypto from "crypto-js";
 import * as fs from "fs";
-import * as moment from "moment-timezone";
+import moment from "moment-timezone";
 import * as schedule from "node-schedule";
 
 import { Amtrak, RawStation } from "./types/amtrak";
@@ -479,9 +479,7 @@ schedule.scheduleJob("*/3 * * * *", updateTrains);
 Bun.serve({
   port: 3001,
   fetch(request) {
-    let url = request.url.replace(":3001", "").split("http://0.0.0.0")[1];
-
-    console.log(request.url);
+    let url = request.url.split(":3001")[1];
 
     if (url.startsWith("/v2")) {
       url = url.replace("/v2", "/v3");

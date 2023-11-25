@@ -481,6 +481,9 @@ Bun.serve({
   fetch(request) {
     let url = request.url.split(":3001")[1];
 
+    console.log(request.url);
+    console.log(url)
+
     if (url.startsWith("/v2")) {
       url = url.replace("/v2", "/v3");
     }

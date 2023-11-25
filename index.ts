@@ -479,8 +479,8 @@ schedule.scheduleJob("*/3 * * * *", updateTrains);
 Bun.serve({
   port: 3001,
   fetch(request) {
-    let url = request.url.split(":3001")[1];
-
+    let url = new URL(request.url).pathname;
+    
     console.log(request.url);
     console.log(url)
 

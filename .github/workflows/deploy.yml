@@ -13,11 +13,11 @@ jobs:
         uses: easingthemes/ssh-deploy@main
         with:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          NARGS: "-rlgoDzvc -i"
+          ARGS: "-rlgoDzvc -i"
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          TARGET_NO: ${{ secrets.REMOTE_TARGET }}
+          TARGET: '/home/uploaded'
           SCRIPT_AFTER: |
             echo $RSYNC_STDOUT
-            ls /home/${{ secrets.REMOTE_USER }}
-            bash /home/${{ secrets.REMOTE_USER }}/amtraker-v3/run.sh
+            ls /home/uploaded
+            bash /home/uploaded/amtraker-v3/run.sh

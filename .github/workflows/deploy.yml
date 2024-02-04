@@ -16,7 +16,7 @@ jobs:
           NARGS: "-rlgoDzvc -i"
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          TARGET: ${{ secrets.REMOTE_TARGET }}
+          TARGET_NO: ${{ secrets.REMOTE_TARGET }}
           SCRIPT_AFTER: |
             echo $RSYNC_STDOUT
             ls /home/${{ secrets.REMOTE_USER }}

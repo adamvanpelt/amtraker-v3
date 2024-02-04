@@ -1,5 +1,4 @@
 import * as crypto from "crypto-js";
-import * as fs from "fs";
 import moment from "moment-timezone";
 import * as schedule from "node-schedule";
 
@@ -480,9 +479,9 @@ Bun.serve({
   port: process.env.PORT ?? 3001,
   fetch(request) {
     let url = new URL(request.url).pathname;
-    
+
     console.log(request.url);
-    console.log(url)
+    console.log(url);
 
     if (url.startsWith("/v2")) {
       url = url.replace("/v2", "/v3");

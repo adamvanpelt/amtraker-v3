@@ -477,7 +477,7 @@ updateTrains();
 schedule.scheduleJob("*/3 * * * *", updateTrains);
 
 Bun.serve({
-  port: 3001,
+  port: process.env.PORT ?? 3001,
   fetch(request) {
     let url = new URL(request.url).pathname;
     

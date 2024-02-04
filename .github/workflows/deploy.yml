@@ -27,4 +27,5 @@ jobs:
           git pull origin main
           git status
           export PORT=80
-          bash run.sh
+          pkill screen
+          screen -dm bash run.sh

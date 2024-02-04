@@ -679,4 +679,10 @@ Bun.serve({
       status: 404,
     });
   },
+  tls: process.env.USE_SSL
+    ? {
+        key: Bun.file("/etc/letsencrypt/live/new.amtraker.com/privkey.pem"),
+        cert: Bun.file("/etc/letsencrypt/live/new.amtraker.com/fullchain.pem"),
+      }
+    : undefined,
 });

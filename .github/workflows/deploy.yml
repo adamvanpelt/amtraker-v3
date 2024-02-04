@@ -26,6 +26,7 @@ jobs:
           cd /root/amtraker-v3
           git pull origin main
           git status
-          export PORT=80
+          export PORT=443
+          export USE_SSL=true
           pkill screen
           screen -dm bash run.sh

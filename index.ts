@@ -16,7 +16,20 @@ import { trainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import cache from "./cache";
 
+import length from '@turf/length';
+import along from '@turf/along';
+
 const snowPiercerShape = JSON.parse(fs.readFileSync('./snowPiercer.json', 'utf8'));
+const snowPiercerShapeLength = length(snowPiercerShape);
+
+const calculateSnowPiercerPosition = (time: Date) => {
+  const timesAround = Math.abs(Number(((time.valueOf() - new Date('2024-04-01T00:00:00-05:00').valueOf()) / (1000 * 60 * 60 * 6)% 1).toFixed(4)));
+  const distanceOnShape = snowPiercerShapeLength * timesAround;
+
+  const point = along(snowPiercerShape, distanceOnShape);
+
+  return point;
+}
 
 let staleData = {
   avgLastUpdate: 0,
@@ -485,14 +498,15 @@ const updateTrains = async () => {
             }
           ]
 
-          let snowPiercerTrain: Train = {
+          const snowPiercerLocation = calculateSnowPiercerPosition(new Date());
+          const snowPiercerTrain: Train = {
             routeName: 'Snowpiercer',
             trainNum: `PRCR`,
             trainID: `PRCR-${new Date(
               snowPiercerStations[0].schDep
             ).getDate()}`,
-            lat: 0,
-            lon: 0,
+            lat: snowPiercerLocation.geometry.coordinates[1],
+            lon: snowPiercerLocation.geometry.coordinates[0],
             trainTimely: 'On Time',
             stations: snowPiercerStations,
             heading: "N",

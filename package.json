@@ -10,6 +10,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@turf/along": "^6.5.0",
+    "@turf/length": "^6.5.0",
     "bun-types": "^0.1.4",
     "crypto-js": "^4.1.1",
     "geo-tz": "^7.0.2",

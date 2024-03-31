@@ -1,6 +1,7 @@
 import * as crypto from "crypto-js";
 import moment from "moment-timezone";
 import * as schedule from "node-schedule";
+import * as fs from 'fs';
 
 import { Amtrak, RawStation } from "./types/amtrak";
 import {
@@ -14,6 +15,8 @@ import {
 import { trainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import cache from "./cache";
+
+const snowPiercerShape = JSON.parse(fs.readFileSync('./snowPiercer.json', 'utf8'));
 
 let staleData = {
   avgLastUpdate: 0,
@@ -321,6 +324,21 @@ const updateTrains = async () => {
         });
       });
 
+      //SNOWPIERCER
+      amtrakerCache.setStation("EARTH", {
+        name: "Earth",
+        code: "EARTH",
+        tz: "America/Chicago",
+        lat: 0,
+        lon: 0,
+        address1: "123 Null Island",
+        address2: " ",
+        city: "Everywhere",
+        state: "US",
+        zip: 30327,
+        trains: [],
+      });
+
       fetchTrainsForCleaning()
         .then((amtrakData) => {
           const nowCleaning: number = new Date().valueOf();
@@ -377,7 +395,7 @@ const updateTrains = async () => {
               routeName: trainNames[+rawTrainData.TrainNum]
                 ? trainNames[+rawTrainData.TrainNum]
                 : rawTrainData.RouteName,
-              trainNum: +rawTrainData.TrainNum,
+              trainNum: `${+rawTrainData.TrainNum}`,
               trainID: `${+rawTrainData.TrainNum}-${new Date(
                 stations[0].schDep
               ).getDate()}`,
@@ -449,6 +467,53 @@ const updateTrains = async () => {
               staleData.activeTrains++;
             }
           });
+
+          //SNOWPIERCER
+          const snowPiercerStations = [
+            {
+              "name": "Earth",
+              "code": "EARTH",
+              "tz": "America/Chicago",
+              "bus": false,
+              "schArr": "2024-04-01T00:00:00-05:00",
+              "schDep": "2024-04-01T23:59:59-05:00",
+              "arr": "2024-04-01T00:00:00-05:00",
+              "dep": "2024-04-01T23:59:59-05:00",
+              "arrCmnt": "Always Here",
+              "depCmnt": "Always Here",
+              "status": "Enroute"
+            }
+          ]
+
+          let snowPiercerTrain: Train = {
+            routeName: 'Snowpiercer',
+            trainNum: `PRCR`,
+            trainID: `PRCR-${new Date(
+              snowPiercerStations[0].schDep
+            ).getDate()}`,
+            lat: 0,
+            lon: 0,
+            trainTimely: 'On Time',
+            stations: snowPiercerStations,
+            heading: "N",
+            eventCode: "EARTH",
+            eventTZ: ['America/Chicago'],
+            eventName: 'Earth',
+            origCode: "EARTH",
+            originTZ: ['America/Chicago'],
+            origName: 'Earth',
+            destCode: "EARTH",
+            destTZ: ['America/Chicago'],
+            destName: 'Earth',
+            trainState: 'Active',
+            velocity: 106,
+            statusMsg: ' ',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            lastValTS: new Date().toISOString(),
+            objectID: 30327,
+          };
+          trains['PRCR'] = [snowPiercerTrain];
 
           staleData.avgLastUpdate =
             staleData.avgLastUpdate / staleData.activeTrains;

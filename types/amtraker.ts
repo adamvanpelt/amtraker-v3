@@ -1,6 +1,6 @@
 export interface Train {
   routeName: string;
-  trainNum: number;
+  trainNum: string;
   trainID: string;
   lat: number;
   lon: number;

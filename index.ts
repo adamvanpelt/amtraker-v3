@@ -22,6 +22,8 @@ import along from '@turf/along';
 const snowPiercerShape = JSON.parse(fs.readFileSync('./snowPiercer.json', 'utf8'));
 const snowPiercerShapeLength = length(snowPiercerShape);
 
+console.log(snowPiercerShapeLength)
+
 const calculateSnowPiercerPosition = (time: Date) => {
   const timesAround = Math.abs(Number(((time.valueOf() - new Date('2024-04-01T00:00:00-05:00').valueOf()) / (1000 * 60 * 60 * 6)% 1).toFixed(4)));
   const distanceOnShape = snowPiercerShapeLength * timesAround;
@@ -520,7 +522,7 @@ const updateTrains = async () => {
             destTZ: ['America/Chicago'],
             destName: 'Earth',
             trainState: 'Active',
-            velocity: 106,
+            velocity: 1641.66,
             statusMsg: ' ',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),

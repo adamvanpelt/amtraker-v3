@@ -563,7 +563,7 @@ const updateTrains = async () => {
 
 updateTrains();
 
-schedule.scheduleJob("* * * * *", updateTrains);
+schedule.scheduleJob("*/5 * * * *", updateTrains);
 
 Bun.serve({
   port: process.env.PORT ?? 3001,

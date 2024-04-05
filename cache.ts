@@ -53,4 +53,8 @@ export default class cache {
   setStations(data: StationResponse) {
     this.stations = data;
   }
+
+  stationExists(code: string) {
+    return this.stations[code] !== undefined && this.stations[code] !== null
+  }
 }

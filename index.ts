@@ -102,8 +102,8 @@ const fetchStationsForCleaning = async () => {
     data.length
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  return JSON.parse(decrypt(mainContent, privateKey)).StationsDataResponse
-    .features;
+  return JSON.parse(decrypt(mainContent, privateKey))?.StationsDataResponse
+    ?.features;
 };
 
 const parseDate = (badDate: string | null, code: string | null) => {
@@ -302,8 +302,8 @@ const parseRawStation = (rawStation: RawStation) => {
         rawStation.code
       );
     } else {
-      console.log("wtf goin on??????");
-      console.log(rawStation);
+      //console.log("wtf goin on??????");
+      //console.log(rawStation);
     }
   }
 
@@ -332,6 +332,7 @@ const updateTrains = async () => {
   shitsFucked = false;
   fetchStationsForCleaning()
     .then((stationData) => {
+      /*
       stationData.forEach((station) => {
         amtrakerCache.setStation(station.properties.Code, {
           name: stationMetaData.stationNames[station.properties.Code],
@@ -347,7 +348,9 @@ const updateTrains = async () => {
           trains: [],
         });
       });
+      */
 
+      /*
       //SNOWPIERCER
       amtrakerCache.setStation("EARTH", {
         name: "Earth",
@@ -362,6 +365,7 @@ const updateTrains = async () => {
         zip: 30327,
         trains: [],
       });
+      */
 
       fetchTrainsForCleaning()
         .then((amtrakData) => {
@@ -396,12 +400,28 @@ const updateTrains = async () => {
             }
 
             let stations = rawStations.map((station) => {
+              if (!amtrakerCache.stationExists(station.code)) {
+                amtrakerCache.setStation(station.code, {
+                  name: stationMetaData.stationNames[station.code],
+                  code: station.code,
+                  tz: stationMetaData.timeZones[station.code],
+                  lat: null,
+                  lon: null,
+                  address1: null,
+                  address2: null,
+                  city: null,
+                  state: null,
+                  zip: null,
+                  trains: [],
+                });
+              }
+
               const result = parseRawStation(station);
 
               if (result.code === "" && rawTrainData.TrainNum == 0) {
                 //whats debugging? lol
-                console.log(station);
-                console.log(result);
+                //console.log(station);
+                //console.log(result);
               }
 
               return result;
@@ -492,6 +512,7 @@ const updateTrains = async () => {
             }
           });
 
+          /*
           //SNOWPIERCER
           const snowPiercerStations = [
             {
@@ -539,6 +560,7 @@ const updateTrains = async () => {
             objectID: 30327,
           };
           trains["PRCR"] = [snowPiercerTrain];
+          */
 
           staleData.avgLastUpdate =
             staleData.avgLastUpdate / staleData.activeTrains;

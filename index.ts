@@ -104,8 +104,9 @@ const fetchStationsForCleaning = async () => {
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
   const decrypted = decrypt(mainContent, privateKey);
 
-  return decrypted.length > 0 ?JSON.parse(decrypted)?.StationsDataResponse
-    ?.features : [];
+  return decrypted.length > 0
+    ? JSON.parse(decrypted)?.StationsDataResponse?.features
+    : [];
 };
 
 const parseDate = (badDate: string | null, code: string | null) => {
@@ -410,10 +411,10 @@ const updateTrains = async () => {
                   tz: stationMetaData.timeZones[station.code],
                   lat: 0,
                   lon: 0,
-                  address1: 'ADDRESS1',
-                  address2: 'ADDRESS2',
-                  city: 'CITY',
-                  state: 'STATE',
+                  address1: "ADDRESS1",
+                  address2: "ADDRESS2",
+                  city: "CITY",
+                  state: "STATE",
                   zip: 0,
                   trains: [],
                 });
@@ -509,56 +510,6 @@ const updateTrains = async () => {
             }
           });
 
-          /*
-          //SNOWPIERCER
-          const snowPiercerStations = [
-            {
-              name: "Earth",
-              code: "EARTH",
-              tz: "America/Chicago",
-              bus: false,
-              schArr: "2024-04-01T00:00:00-05:00",
-              schDep: "2024-04-01T23:59:59-05:00",
-              arr: "2024-04-01T00:00:00-05:00",
-              dep: "2024-04-01T23:59:59-05:00",
-              arrCmnt: "Always Here",
-              depCmnt: "Always Here",
-              status: "Enroute",
-            },
-          ];
-
-          const snowPiercerLocation = calculateSnowPiercerPosition(new Date());
-          const snowPiercerTrain: Train = {
-            routeName: "Snowpiercer",
-            trainNum: `PRCR`,
-            trainID: `PRCR-${new Date(
-              snowPiercerStations[0].schDep
-            ).getDate()}`,
-            lat: snowPiercerLocation.geometry.coordinates[1],
-            lon: snowPiercerLocation.geometry.coordinates[0],
-            trainTimely: "On Time",
-            stations: snowPiercerStations,
-            heading: "N",
-            eventCode: "EARTH",
-            eventTZ: ["America/Chicago"],
-            eventName: "Earth",
-            origCode: "EARTH",
-            originTZ: ["America/Chicago"],
-            origName: "Earth",
-            destCode: "EARTH",
-            destTZ: ["America/Chicago"],
-            destName: "Earth",
-            trainState: "Active",
-            velocity: 1641.66,
-            statusMsg: " ",
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            lastValTS: new Date().toISOString(),
-            objectID: 30327,
-          };
-          trains["PRCR"] = [snowPiercerTrain];
-          */
-
           staleData.avgLastUpdate =
             staleData.avgLastUpdate / staleData.activeTrains;
 
@@ -569,7 +520,7 @@ const updateTrains = async () => {
 
           Object.keys(allStations).forEach((stationKey) => {
             amtrakerCache.setStation(stationKey, allStations[stationKey]);
-          })
+          });
 
           amtrakerCache.setTrains(trains);
           console.log("set trains cache");
@@ -598,6 +549,25 @@ Bun.serve({
 
     if (url.startsWith("/v2")) {
       url = url.replace("/v2", "/v3");
+    }
+
+    if (url === "/v3/all") {
+      const trains = amtrakerCache.getTrains();
+      const stations = amtrakerCache.getStations();
+      const ids = amtrakerCache.getIDs();
+
+      return new Response(JSON.stringify({
+        trains,
+        stations,
+        ids,
+        shitsFucked,
+        staleData,
+      }), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
     }
 
     if (url === "/") {
@@ -642,20 +612,8 @@ Bun.serve({
     }
 
     if (url.startsWith("/v3/ids")) {
-      console.log("all trains");
-      const trains = amtrakerCache.getTrains();
-      const trainIDs = Object.keys(trains).flatMap((trainNum) =>
-        trains[trainNum].map((train) => {
-          const trainOriginDate = new Date(train.stations[0].schDep);
-
-          return `${train.trainNum}-${
-            trainOriginDate.getMonth() + 1
-          }-${trainOriginDate.getDate()}-${trainOriginDate
-            .getFullYear()
-            .toString()
-            .slice(-2)}`;
-        })
-      );
+      console.log("train ids");
+      const trainIDs = amtrakerCache.getIDs();
       return new Response(JSON.stringify(trainIDs), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS

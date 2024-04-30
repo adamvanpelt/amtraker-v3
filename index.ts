@@ -102,8 +102,10 @@ const fetchStationsForCleaning = async () => {
     data.length
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  return JSON.parse(decrypt(mainContent, privateKey))?.StationsDataResponse
-    ?.features;
+  const decrypted = decrypt(mainContent, privateKey);
+
+  return decrypted.length > 0 ?JSON.parse(decrypted)?.StationsDataResponse
+    ?.features : [];
 };
 
 const parseDate = (badDate: string | null, code: string | null) => {

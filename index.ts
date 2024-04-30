@@ -378,6 +378,7 @@ const updateTrains = async () => {
           staleData.stale = false;
 
           let trains: TrainResponse = {};
+          let allStations: StationResponse = {};
 
           amtrakData.forEach((property) => {
             let rawTrainData = property.properties;
@@ -402,29 +403,23 @@ const updateTrains = async () => {
             }
 
             let stations = rawStations.map((station) => {
-              if (!amtrakerCache.stationExists(station.code)) {
+              if (!allStations[station.code]) {
                 amtrakerCache.setStation(station.code, {
                   name: stationMetaData.stationNames[station.code],
                   code: station.code,
                   tz: stationMetaData.timeZones[station.code],
-                  lat: null,
-                  lon: null,
-                  address1: null,
-                  address2: null,
-                  city: null,
-                  state: null,
-                  zip: null,
+                  lat: 0,
+                  lon: 0,
+                  address1: 'ADDRESS1',
+                  address2: 'ADDRESS2',
+                  city: 'CITY',
+                  state: 'STATE',
+                  zip: 0,
                   trains: [],
                 });
               }
 
               const result = parseRawStation(station);
-
-              if (result.code === "" && rawTrainData.TrainNum == 0) {
-                //whats debugging? lol
-                //console.log(station);
-                //console.log(result);
-              }
 
               return result;
             });
@@ -571,6 +566,10 @@ const updateTrains = async () => {
             console.log("Data is stale, setting...");
             staleData.stale = true;
           }
+
+          Object.keys(allStations).forEach((stationKey) => {
+            amtrakerCache.setStation(stationKey, allStations[stationKey]);
+          })
 
           amtrakerCache.setTrains(trains);
           console.log("set trains cache");

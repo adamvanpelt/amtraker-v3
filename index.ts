@@ -16,6 +16,8 @@ import { trainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import cache from "./cache";
 
+import rawStations from './rawStations.json';
+
 import length from "@turf/length";
 import along from "@turf/along";
 
@@ -60,8 +62,8 @@ const publicKey = "69af143c-e8cf-47f8-bf09-fc1f61e5cc33";
 const masterSegment = 88;
 
 const amtrakerCache = new cache();
-let decryptedTrainData = {};
-let decryptedStationData = {};
+let decryptedTrainData = '';
+let decryptedStationData = '';
 
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
@@ -87,10 +89,10 @@ const fetchTrainsForCleaning = async () => {
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
 
-  const decryptedData = JSON.parse(decrypt(mainContent, privateKey));
-  decryptedTrainData = decryptedData;
+  const decryptedData = decrypt(mainContent, privateKey);
+  decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
 
-  return decryptedData.features;
+  return JSON.parse(decryptedData).features;
 };
 
 const fetchStationsForCleaning = async () => {
@@ -104,11 +106,11 @@ const fetchStationsForCleaning = async () => {
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
   const decrypted = decrypt(mainContent, privateKey);
-  decryptedStationData = decrypted;
+  decryptedStationData = JSON.stringify(JSON.parse(decrypted)?.StationsDataResponse);
 
   return decrypted.length > 0
     ? JSON.parse(decrypted)?.StationsDataResponse?.features
-    : [];
+    : rawStations.features;
 };
 
 const parseDate = (badDate: string | null, code: string | null) => {
@@ -599,7 +601,7 @@ Bun.serve({
     }
 
     if (url === "/v3/raw") {
-      return new Response(JSON.stringify(decryptedTrainData), {
+      return new Response(decryptedTrainData, {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",
@@ -608,7 +610,7 @@ Bun.serve({
     }
 
     if (url === "/v3/rawStations") {
-      return new Response(JSON.stringify(decryptedStationData), {
+      return new Response(decryptedStationData, {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

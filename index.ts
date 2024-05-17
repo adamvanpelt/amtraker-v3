@@ -608,7 +608,7 @@ Bun.serve({
     }
 
     if (url === "/v3/rawStations") {
-      return new Response(JSON.stringify(decrypted), {
+      return new Response(JSON.stringify(decryptedStationData), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

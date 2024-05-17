@@ -61,6 +61,7 @@ const masterSegment = 88;
 
 const amtrakerCache = new cache();
 let decryptedTrainData = {};
+let decryptedStationData = {};
 
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
@@ -103,6 +104,7 @@ const fetchStationsForCleaning = async () => {
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
   const decrypted = decrypt(mainContent, privateKey);
+  decryptedStationData = decrypted;
 
   return decrypted.length > 0
     ? JSON.parse(decrypted)?.StationsDataResponse?.features
@@ -335,7 +337,6 @@ const updateTrains = async () => {
   shitsFucked = false;
   fetchStationsForCleaning()
     .then((stationData) => {
-      /*
       stationData.forEach((station) => {
         amtrakerCache.setStation(station.properties.Code, {
           name: stationMetaData.stationNames[station.properties.Code],
@@ -351,7 +352,6 @@ const updateTrains = async () => {
           trains: [],
         });
       });
-      */
 
       /*
       //SNOWPIERCER
@@ -405,19 +405,21 @@ const updateTrains = async () => {
 
             let stations = rawStations.map((station) => {
               if (!allStations[station.code]) {
-                amtrakerCache.setStation(station.code, {
-                  name: stationMetaData.stationNames[station.code],
-                  code: station.code,
-                  tz: stationMetaData.timeZones[station.code],
-                  lat: 0,
-                  lon: 0,
-                  address1: "ADDRESS1",
-                  address2: "ADDRESS2",
-                  city: "CITY",
-                  state: "STATE",
-                  zip: 0,
-                  trains: [],
-                });
+                if (!amtrakerCache.stationExists(station.code)) {
+                  amtrakerCache.setStation(station.code, {
+                    name: stationMetaData.stationNames[station.code],
+                    code: station.code,
+                    tz: stationMetaData.timeZones[station.code],
+                    lat: 0,
+                    lon: 0,
+                    address1: "ADDRESS1",
+                    address2: "ADDRESS2",
+                    city: "CITY",
+                    state: "STATE",
+                    zip: 0,
+                    trains: [],
+                  });
+                }
               }
 
               const result = parseRawStation(station);
@@ -556,18 +558,21 @@ Bun.serve({
       const stations = amtrakerCache.getStations();
       const ids = amtrakerCache.getIDs();
 
-      return new Response(JSON.stringify({
-        trains,
-        stations,
-        ids,
-        shitsFucked,
-        staleData,
-      }), {
-        headers: {
-          "Access-Control-Allow-Origin": "*", // CORS
-          "content-type": "application/json",
-        },
-      });
+      return new Response(
+        JSON.stringify({
+          trains,
+          stations,
+          ids,
+          shitsFucked,
+          staleData,
+        }),
+        {
+          headers: {
+            "Access-Control-Allow-Origin": "*", // CORS
+            "content-type": "application/json",
+          },
+        }
+      );
     }
 
     if (url === "/") {
@@ -595,6 +600,15 @@ Bun.serve({
 
     if (url === "/v3/raw") {
       return new Response(JSON.stringify(decryptedTrainData), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
+    }
+
+    if (url === "/v3/rawStations") {
+      return new Response(JSON.stringify(decrypted), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

@@ -16,7 +16,7 @@ import { trainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import cache from "./cache";
 
-import rawStations from './rawStations.json';
+import rawStations from "./rawStations.json";
 
 import length from "@turf/length";
 import along from "@turf/along";
@@ -62,8 +62,8 @@ const publicKey = "69af143c-e8cf-47f8-bf09-fc1f61e5cc33";
 const masterSegment = 88;
 
 const amtrakerCache = new cache();
-let decryptedTrainData = '';
-let decryptedStationData = '';
+let decryptedTrainData = "";
+let decryptedStationData = "";
 
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
@@ -106,7 +106,9 @@ const fetchStationsForCleaning = async () => {
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
   const decrypted = decrypt(mainContent, privateKey);
-  decryptedStationData = JSON.stringify(JSON.parse(decrypted)?.StationsDataResponse);
+  decryptedStationData = JSON.stringify(
+    JSON.parse(decrypted)?.StationsDataResponse
+  );
 
   return decrypted.length > 0
     ? JSON.parse(decrypted)?.StationsDataResponse?.features
@@ -205,18 +207,29 @@ const generateCmnt = (
   }
 };
 
-const parseRawStation = (rawStation: RawStation) => {
+const parseRawStation = (rawStation: RawStation, debug: boolean = false) => {
   let status: StationStatus;
   let arr: string;
   let dep: string;
   let arrCmnt: string;
   let depCmnt: string;
 
+  if (!rawStation.scharr && !rawStation.postarr) {
+    //first station
+    if (rawStation.postdep) {
+      //has departed
+      if (debug) console.log("First station departed:", rawStation.code);
+    }
+  }
+
+  if (debug && (rawStation.code === "OXN" || rawStation.code === "SBA"))
+    console.log(rawStation);
+
   if (rawStation.estarr == null && rawStation.postarr == null) {
     // is this the first station
     if (rawStation.postdep != null) {
       // if the train has departed
-      //console.log("has departed first station");
+      if (debug) console.log("has departed first station", rawStation.code);
       status = StationStatus.Departed;
       dep = parseDate(rawStation.postdep, rawStation.code);
       depCmnt = generateCmnt(
@@ -226,7 +239,7 @@ const parseRawStation = (rawStation: RawStation) => {
       );
     } else {
       // if the train hasn't departed
-      //console.log("has not departed first station");
+      if (debug) console.log("has not departed first station", rawStation.code);
       status = StationStatus.Station;
       dep = parseDate(rawStation.estdep, rawStation.code);
       depCmnt = generateCmnt(
@@ -239,7 +252,7 @@ const parseRawStation = (rawStation: RawStation) => {
     // is this the last station
     if (rawStation.postarr != null) {
       // if the train has arrived
-      //console.log("has arrived last station");
+      if (debug) console.log("has arrived last station", rawStation.code);
       status = StationStatus.Station;
       arr = parseDate(rawStation.postarr, rawStation.code);
       arrCmnt = generateCmnt(
@@ -249,7 +262,7 @@ const parseRawStation = (rawStation: RawStation) => {
       );
     } else {
       // if the train is enroute
-      //console.log("enroute to last station");
+      if (debug) console.log("enroute to last station", rawStation.code);
       status = StationStatus.Enroute;
       arr = parseDate(rawStation.estarr, rawStation.code);
       arrCmnt = generateCmnt(
@@ -262,7 +275,7 @@ const parseRawStation = (rawStation: RawStation) => {
     // for all other stations
     if (rawStation.estarr != null && rawStation.estdep != null) {
       // if the train is enroute
-      //console.log("enroute");
+      if (debug) console.log("enroute", rawStation.code);
       status = StationStatus.Enroute;
       arr = parseDate(rawStation.estarr, rawStation.code);
       dep = parseDate(rawStation.estdep, rawStation.code);
@@ -278,7 +291,7 @@ const parseRawStation = (rawStation: RawStation) => {
       );
     } else if (rawStation.postarr != null && rawStation.estdep != null) {
       // if the train has arrived but not departed
-      //console.log("not departed");
+      if (debug) console.log("not departed", rawStation.code);
       status = StationStatus.Station;
       arr = parseDate(rawStation.postarr, rawStation.code);
       dep = parseDate(rawStation.estdep, rawStation.code);
@@ -294,7 +307,7 @@ const parseRawStation = (rawStation: RawStation) => {
       );
     } else if (rawStation.postdep != null || rawStation.postcmnt != null) {
       // if the train has departed
-      //console.log("has departed");
+      if (debug) console.log("has departed", rawStation.code);
       status = StationStatus.Departed;
       arr = parseDate(rawStation.postarr, rawStation.code);
       dep = parseDate(rawStation.postdep, rawStation.code);
@@ -309,7 +322,7 @@ const parseRawStation = (rawStation: RawStation) => {
         rawStation.code
       );
     } else {
-      //console.log("wtf goin on??????");
+      if (debug) console.log("wtf goin on??????");
       //console.log(rawStation);
     }
   }
@@ -354,23 +367,6 @@ const updateTrains = async () => {
           trains: [],
         });
       });
-
-      /*
-      //SNOWPIERCER
-      amtrakerCache.setStation("EARTH", {
-        name: "Earth",
-        code: "EARTH",
-        tz: "America/Chicago",
-        lat: 0,
-        lon: 0,
-        address1: "123 Null Island",
-        address2: " ",
-        city: "Everywhere",
-        state: "US",
-        zip: 30327,
-        trains: [],
-      });
-      */
 
       fetchTrainsForCleaning()
         .then((amtrakData) => {
@@ -424,9 +420,18 @@ const updateTrains = async () => {
                 }
               }
 
-              const result = parseRawStation(station);
+              const result = parseRawStation(station); //, rawTrainData.TrainNum == "784");
 
               return result;
+            });
+
+            let stationsFixed = stations.map((station, i, arr) => {
+              if (!station.arr && !station.dep) {
+                if (i === 0) return station; //cant really fix this
+
+                const lastStation = arr[i - 1];
+                if (!lastStation.dep && !lastStation.schDep) return station; //dont have the data
+              }
             });
 
             if (stations.length === 0) {
@@ -436,6 +441,17 @@ const updateTrains = async () => {
               );
               return;
             }
+
+            const enrouteStations = stations.filter(
+              (station) =>
+                (station.status === "Enroute" ||
+                  station.status === "Station") &&
+                (station.arr || station.dep)
+            );
+            const trainEventCode =
+              enrouteStations.length === 0
+                ? stations[stations.length - 1].code
+                : enrouteStations[0].code;
 
             let train: Train = {
               routeName: trainNames[+rawTrainData.TrainNum]
@@ -448,27 +464,15 @@ const updateTrains = async () => {
               lat: property.geometry.coordinates[1],
               lon: property.geometry.coordinates[0],
               trainTimely: (
-                stations.find(
-                  (station) => station.code === rawTrainData.EventCode
-                ) || { arrCmnt: "Unknown" }
+                stations.find((station) => station.code === trainEventCode) || {
+                  arrCmnt: "Unknown",
+                }
               ).arrCmnt,
               stations: stations,
               heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
-              eventCode: rawTrainData.EventCode
-                ? rawTrainData.EventCode
-                : stations[0].code,
-              eventTZ:
-                stationMetaData.timeZones[
-                  rawTrainData.EventCode
-                    ? rawTrainData.EventCode
-                    : stations[0].code
-                ],
-              eventName:
-                stationMetaData.stationNames[
-                  rawTrainData.EventCode
-                    ? rawTrainData.EventCode
-                    : stations[0].code
-                ],
+              eventCode: trainEventCode,
+              eventTZ: stationMetaData.timeZones[trainEventCode],
+              eventName: stationMetaData.stationNames[trainEventCode],
               origCode: rawTrainData.OrigCode,
               originTZ: stationMetaData.timeZones[rawTrainData.OrigCode],
               origName: stationMetaData.stationNames[rawTrainData.OrigCode],
@@ -482,25 +486,19 @@ const updateTrains = async () => {
                   (station) =>
                     !station.arr &&
                     !station.dep &&
-                    station.code ===
-                      (rawTrainData.EventCode
-                        ? rawTrainData.EventCode
-                        : stations[0].code)
+                    station.code === trainEventCode
                 ).length > 0
                   ? "SERVICE DISRUPTION"
                   : rawTrainData.StatusMsg,
-              createdAt: parseDate(rawTrainData.created_at, "America/New_York")
-                ? parseDate(rawTrainData.created_at, "America/New_York")
-                : parseDate(rawTrainData.updated_at, "America/New_York"),
-              updatedAt: parseDate(rawTrainData.updated_at, "America/New_York")
-                ? parseDate(rawTrainData.updated_at, "America/New_York")
-                : parseDate(rawTrainData.created_at, "America/New_York"),
-              lastValTS: parseDate(
-                rawTrainData.LastValTS,
-                rawTrainData.EventCode
-              )
-                ? parseDate(rawTrainData.LastValTS, rawTrainData.EventCode)
-                : stations[0].schDep,
+              createdAt:
+                parseDate(rawTrainData.created_at, "America/New_York") ??
+                parseDate(rawTrainData.updated_at, "America/New_York"),
+              updatedAt:
+                parseDate(rawTrainData.updated_at, "America/New_York") ??
+                parseDate(rawTrainData.created_at, "America/New_York"),
+              lastValTS:
+                parseDate(rawTrainData.LastValTS, trainEventCode) ??
+                stations[0].schDep,
               objectID: rawTrainData.OBJECTID,
             };
 

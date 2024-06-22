@@ -14,6 +14,7 @@
     "@turf/length": "^6.5.0",
     "bun-types": "^0.1.4",
     "crypto-js": "^4.1.1",
+    "fast-xml-parser": "^4.4.0",
     "geo-tz": "^7.0.2",
     "moment": "2.29.4",
     "moment-duration-format": "2.3.2",

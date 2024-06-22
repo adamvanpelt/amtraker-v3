@@ -2,6 +2,9 @@ import * as crypto from "crypto-js";
 import moment from "moment-timezone";
 import * as schedule from "node-schedule";
 import * as fs from "fs";
+import { XMLBuilder } from "fast-xml-parser";
+
+const xmlBuilder = new XMLBuilder();
 
 import { Amtrak, RawStation } from "./types/amtrak";
 import {
@@ -758,6 +761,57 @@ Bun.serve({
           },
         }
       );
+    }
+
+    if (url.startsWith("/v3/oembed")) {
+      const params = new URL(request.url).searchParams;
+      const paramsObj = Object.fromEntries(params.entries());
+
+      const requestedURL = new URL(paramsObj.url);
+      const processedURL =
+        requestedURL.origin + requestedURL.pathname + "?oembed";
+
+      const embedWidth = Math.min(
+        paramsObj.maxwidth ? Number(paramsObj.maxwidth) : 1000,
+        464
+      );
+      const embedHeight = Math.min(
+        paramsObj.maxheight ? Number(paramsObj.maxheight) : 1000,
+        788
+      );
+
+      const oembedResponse = {
+        type: "rich",
+        version: "1.0",
+        title: "",
+        provider_name: "Amtraker",
+        provider_url: "https://amtraker.com",
+        cache_age: "180",
+        html: `<iframe src="${processedURL}" style="border:0px #ffffff none;" name="amtraker_iframe" scrolling="no" frameborder="0" marginheight="0px" marginwidth="0px" height="${embedHeight}px" width="${embedWidth}px" allowfullscreen></iframe>`,
+        width: embedWidth,
+        height: embedHeight,
+      };
+
+      if (paramsObj.format && paramsObj.format === "xml") {
+        const xmlResponse = xmlBuilder.build(oembedResponse);
+
+        return new Response(
+          `<?xml version="1.0" encoding="utf-8"?><oembed>${xmlResponse}</oembed>`,
+          {
+            headers: {
+              "Access-Control-Allow-Origin": "*", // CORS
+              "content-type": "text/xml+oembed",
+            },
+          }
+        );
+      }
+
+      return new Response(JSON.stringify(oembedResponse, null, 2), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json+oembed",
+        },
+      });
     }
 
     return new Response("Not found", {

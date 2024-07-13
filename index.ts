@@ -439,9 +439,9 @@ const updateTrains = async () => {
                 trainState: "Active",
                 velocity: (rawTrainData.speed ?? 0) * 0.621371, // i love metric lol
                 statusMsg: " ",
-                createdAt: rawTrainData.poll,
-                updatedAt: rawTrainData.poll,
-                lastValTS: rawTrainData.poll,
+                createdAt: rawTrainData.poll ?? new Date().toISOString(),
+                updatedAt: rawTrainData.poll ?? new Date().toISOString(),
+                lastValTS: rawTrainData.poll ?? new Date().toISOString(),
                 objectID: rawTrainData.OBJECTID,
                 provider: "Via",
               };

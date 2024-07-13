@@ -16,7 +16,7 @@ import {
   StationResponse,
 } from "./types/amtraker";
 
-import { trainNames } from "./data/trains";
+import { trainNames, viaTrainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import cache from "./cache";
 
@@ -370,25 +370,32 @@ const updateTrains = async () => {
               if (!rawTrainData.departed) return; //train doesn't exist
               if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
 
-              const sortedStations = rawTrainData.times.sort((a, b) => new Date(a.scheduled).valueOf() - new Date(b.scheduled).valueOf())
+              const sortedStations = rawTrainData.times.sort(
+                (a, b) =>
+                  new Date(a.scheduled).valueOf() -
+                  new Date(b.scheduled).valueOf()
+              );
 
               const firstStation = sortedStations[0];
-              const lastStation =
-              sortedStations[sortedStations.length - 1];
+              const lastStation = sortedStations[sortedStations.length - 1];
               const trainEventStation =
-              sortedStations.find((station) => station.eta !== "ARR") ??
+                sortedStations.find((station) => station.eta !== "ARR") ??
                 firstStation;
 
               let train: Train = {
                 routeName:
-                  trainNames[actualTrainNum] ??
+                  viaTrainNames[trainNum.split(" ")[0]] ??
                   `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
                 trainNum: `${actualTrainNum}`,
                 trainID: `${actualTrainNum}-${
                   rawTrainData.instance.split("-")[1]
                 }`,
-                lat: rawTrainData.lat ?? stationMetaData.viaCoords[firstStation.code][0],
-                lon: rawTrainData.lng ?? stationMetaData.viaCoords[firstStation.code][1],
+                lat:
+                  rawTrainData.lat ??
+                  stationMetaData.viaCoords[firstStation.code][0],
+                lon:
+                  rawTrainData.lng ??
+                  stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
                 stations: sortedStations.map((station) => {
                   if (!allStations[station.code]) {

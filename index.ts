@@ -434,7 +434,7 @@ const updateTrains = async () => {
                     dep: (station.departure ?? station.arrival).estimated,
                     arrCmnt: "",
                     depCmnt: "",
-                    status: station.eta === "ARR" ? "Enroute" : "Departed",
+                    status: station.eta === "ARR" ? "Departed": "Enroute",
                   };
                 }),
                 heading: ccDegToCardinal(rawTrainData.direction),

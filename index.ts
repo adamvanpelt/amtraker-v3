@@ -366,7 +366,7 @@ const updateTrains = async () => {
 
             Object.keys(viaData).forEach((trainNum) => {
               const rawTrainData = viaData[trainNum];
-              const actualTrainNum = "V" + trainNum.split(" ")[0];
+              const actualTrainNum = "v" + trainNum.split(" ")[0];
               if (!rawTrainData.departed) return; //train doesn't exist
               if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
 

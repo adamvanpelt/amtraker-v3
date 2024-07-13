@@ -398,6 +398,11 @@ const updateTrains = async () => {
                   stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
                 stations: sortedStations.map((station) => {
+                  if (!stationMetaData.viaCoords[station.code]) {
+                    console.log(station.code)
+                    console.log(station)
+                  }
+                  
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
                       name: stationMetaData.viaStationNames[station.code],

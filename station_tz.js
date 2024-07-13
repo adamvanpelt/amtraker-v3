@@ -1,18 +1,22 @@
 const fs = require("fs");
 const geoTz = require("geo-tz");
 
-const stations = fs.readFileSync("./Amtrak_Stations.geojson", "utf-8");
+const stations = fs.readFileSync("./viastations.json", "utf-8");
 
 const stationsJSON = JSON.parse(stations);
 
 let parsedStations = {};
 
-stationsJSON.features.forEach((feature) => {
+stationsJSON.forEach((feature) => {
+  const coord = feature.field_coordinates.replace(' ', '').split(',').map((n) => Number(n));
+  console.log(feature)
+
   let tz = geoTz.find(
-    feature.geometry.coordinates[1],
-    feature.geometry.coordinates[0]
+    ...coord
   );
-  parsedStations[feature.properties.code] = tz ?? "Unknown";
+  parsedStations[feature.title.split(' ')[0]] = tz ?? "Unknown";
 });
 
-console.log(geoTz.find(73.1673, 44.0153));
+//console.log(geoTz.find(73.1673, 44.0153));
+
+console.log(JSON.stringify(parsedStations))

@@ -370,11 +370,13 @@ const updateTrains = async () => {
               if (!rawTrainData.departed) return; //train doesn't exist
               if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
 
-              const firstStation = rawTrainData.times[0];
+              const sortedStations = rawTrainData.times.sort((a, b) => new Date(a.scheduled).valueOf() - new Date(b.scheduled).valueOf())
+
+              const firstStation = sortedStations[0];
               const lastStation =
-                rawTrainData.times[rawTrainData.times.length - 1];
+              sortedStations[sortedStations.length - 1];
               const trainEventStation =
-                rawTrainData.times.find((station) => station.eta !== "ARR") ??
+              sortedStations.find((station) => station.eta !== "ARR") ??
                 firstStation;
 
               let train: Train = {
@@ -388,7 +390,7 @@ const updateTrains = async () => {
                 lat: rawTrainData.lat ?? stationMetaData.viaCoords[firstStation.code][0],
                 lon: rawTrainData.lng ?? stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
-                stations: rawTrainData.times.map((station) => {
+                stations: sortedStations.map((station) => {
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
                       name: stationMetaData.viaStationNames[station.code],

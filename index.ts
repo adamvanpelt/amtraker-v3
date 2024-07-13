@@ -435,7 +435,7 @@ const updateTrains = async () => {
                 destTZ: stationMetaData.viatimeZones[lastStation.code][0],
                 destName: stationMetaData.viaStationNames[lastStation.code],
                 trainState: "Active",
-                velocity: rawTrainData.speed * 0.621371, // i love metric lol
+                velocity: (rawTrainData.speed ?? 0) * 0.621371, // i love metric lol
                 statusMsg: " ",
                 createdAt: rawTrainData.poll,
                 updatedAt: rawTrainData.poll,

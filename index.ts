@@ -426,7 +426,7 @@ const updateTrains = async () => {
                   return {
                     name: stationMetaData.viaStationNames[station.code],
                     code: station.code,
-                    tz: stationMetaData.viatimeZones[station.code][0],
+                    tz: stationMetaData.viatimeZones[station.code],
                     bus: false,
                     schArr: (station.arrival ?? station.departure).scheduled,
                     schDep: (station.departure ?? station.arrival).scheduled,
@@ -440,13 +440,13 @@ const updateTrains = async () => {
                 heading: ccDegToCardinal(rawTrainData.direction),
                 eventCode: trainEventStation.code,
                 eventTZ:
-                  stationMetaData.viatimeZones[trainEventStation.code][0],
+                  stationMetaData.viatimeZones[trainEventStation.code],
                 eventName: trainEventStation.code,
                 origCode: firstStation.code,
-                originTZ: stationMetaData.viatimeZones[firstStation.code][0],
+                originTZ: stationMetaData.viatimeZones[firstStation.code],
                 origName: stationMetaData.viaStationNames[firstStation.code],
                 destCode: lastStation.code,
-                destTZ: stationMetaData.viatimeZones[lastStation.code][0],
+                destTZ: stationMetaData.viatimeZones[lastStation.code],
                 destName: stationMetaData.viaStationNames[lastStation.code],
                 trainState: "Active",
                 velocity: (rawTrainData.speed ?? 0) * 0.621371, // i love metric lol

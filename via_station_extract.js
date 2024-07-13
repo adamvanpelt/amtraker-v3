@@ -20,7 +20,7 @@ for (let i = 0; i < rows.length; i++) {
 
   names[rowSplit[1]] = rowSplit[2];
   timezones[rowSplit[1]] = rowSplit[6];
-  coords[rowSplit[1]] = [rowSplit[5], rowSplit[4]];
+  coords[rowSplit[1]] = [Number(rowSplit[5]), Number(rowSplit[4])];
 
   console.log(rowSplit)
 }

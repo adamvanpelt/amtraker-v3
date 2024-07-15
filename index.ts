@@ -388,7 +388,7 @@ const updateTrains = async () => {
                   `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
                 trainNum: `${actualTrainNum}`,
                 trainID: `${actualTrainNum}-${
-                  rawTrainData.instance.split("-")[1]
+                  rawTrainData.instance.split("-")[2]
                 }`,
                 lat:
                   rawTrainData.lat ??
@@ -410,8 +410,8 @@ const updateTrains = async () => {
                       tz: stationMetaData.viatimeZones[station.code],
                       lat: stationMetaData.viaCoords[station.code][0],
                       lon: stationMetaData.viaCoords[station.code][1],
-                      address1: "Via Station",
-                      address2: "Addresses Not Available",
+                      address1: "Via Station Addresses Not Available",
+                      address2: "",
                       city: "",
                       state: "",
                       zip: 0,

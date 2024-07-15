@@ -382,6 +382,8 @@ const updateTrains = async () => {
                 sortedStations.find((station) => station.eta !== "ARR") ??
                 firstStation;
 
+              let trainDelay = 0;
+
               let train: Train = {
                 routeName:
                   viaTrainNames[trainNum.split(" ")[0]] ??
@@ -398,11 +400,11 @@ const updateTrains = async () => {
                   stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
                 stations: sortedStations.map((station) => {
-                  if (!stationMetaData.viaCoords[station.code]) {
-                    console.log(station.code)
-                    console.log(station)
-                  }
-                  
+                  //if (!stationMetaData.viaCoords[station.code]) {
+                  //  console.log(station.code)
+                  //  console.log(station)
+                  //}
+
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
                       name: stationMetaData.viaStationNames[station.code],
@@ -423,6 +425,17 @@ const updateTrains = async () => {
                     `${actualTrainNum}-${rawTrainData.instance.split("-")[1]}`
                   );
 
+                  if (station.arrival && station.arrival.estimated) {
+                    trainDelay =
+                      new Date(station.arrival.estimated).valueOf() -
+                      new Date(station.arrival.scheduled).valueOf();
+                  }
+
+                  const estArr = (station.arrival ?? station.departure)
+                    .estimated;
+                  const estDep = (station.departure ?? station.arrival)
+                    .estimated;
+
                   return {
                     name: stationMetaData.viaStationNames[station.code],
                     code: station.code,
@@ -430,17 +443,16 @@ const updateTrains = async () => {
                     bus: false,
                     schArr: (station.arrival ?? station.departure).scheduled,
                     schDep: (station.departure ?? station.arrival).scheduled,
-                    arr: (station.arrival ?? station.departure).estimated,
-                    dep: (station.departure ?? station.arrival).estimated,
+                    arr: estArr ?? new Date(new Date((station.arrival ?? station.departure).scheduled).valueOf() + trainDelay),
+                    dep: estDep ?? new Date(new Date((station.departure ?? station.arrival).scheduled).valueOf() + trainDelay),
                     arrCmnt: "",
                     depCmnt: "",
-                    status: station.eta === "ARR" ? "Departed": "Enroute",
+                    status: station.eta === "ARR" ? "Departed" : "Enroute",
                   };
                 }),
                 heading: ccDegToCardinal(rawTrainData.direction),
                 eventCode: trainEventStation.code,
-                eventTZ:
-                  stationMetaData.viatimeZones[trainEventStation.code],
+                eventTZ: stationMetaData.viatimeZones[trainEventStation.code],
                 eventName: trainEventStation.code,
                 origCode: firstStation.code,
                 originTZ: stationMetaData.viatimeZones[firstStation.code],

@@ -109,17 +109,28 @@ const fetchAmtrakTrainsForCleaning = async () => {
   const response = await fetch(amtrakTrainsURL);
   const data = await response.text();
 
+  console.log("fetch in t");
+
   const mainContent = data.substring(0, data.length - masterSegment);
   const encryptedPrivateKey = data.substr(
     data.length - masterSegment,
     data.length
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-
   const decryptedData = decrypt(mainContent, privateKey);
-  decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
 
-  return JSON.parse(decryptedData).features;
+  console.log("dec in t");
+
+  //console.log(decryptedTrainData);
+
+  try {
+    decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
+
+    return JSON.parse(decryptedData).features;
+  } catch (e) {
+    shitsFucked = true;
+    return [];
+  }
 };
 
 const fetchAmtrakStationsForCleaning = async () => {
@@ -133,13 +144,20 @@ const fetchAmtrakStationsForCleaning = async () => {
   );
   const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
   const decrypted = decrypt(mainContent, privateKey);
-  decryptedStationData = JSON.stringify(
-    JSON.parse(decrypted)?.StationsDataResponse
-  );
 
-  return decrypted.length > 0
-    ? JSON.parse(decrypted)?.StationsDataResponse?.features
-    : rawStations.features;
+  try {
+    decryptedStationData = JSON.stringify(
+      JSON.parse(decrypted)?.StationsDataResponse
+    );
+
+    return decrypted.length > 0
+      ? JSON.parse(decrypted)?.StationsDataResponse?.features
+      : rawStations.features;
+  } catch (e) {
+    //console.log("stations e:", e.toString());
+    decryptedStationData = JSON.stringify(rawStations.features);
+    return rawStations.features;
+  }
 };
 
 const fetchViaForCleaning = async () => {
@@ -337,6 +355,7 @@ const updateTrains = async () => {
   fetchViaForCleaning()
     .then((viaData) => {
       fetchAmtrakStationsForCleaning().then((stationData) => {
+        console.log("fetched s");
         stationData.forEach((station) => {
           amtrakerCache.setStation(station.properties.Code, {
             name: stationMetaData.stationNames[station.properties.Code],
@@ -355,6 +374,7 @@ const updateTrains = async () => {
 
         fetchAmtrakTrainsForCleaning()
           .then((amtrakData) => {
+            console.log("fetched t");
             const nowCleaning: number = new Date().valueOf();
 
             staleData.activeTrains = 0;
@@ -443,8 +463,20 @@ const updateTrains = async () => {
                     bus: false,
                     schArr: (station.arrival ?? station.departure).scheduled,
                     schDep: (station.departure ?? station.arrival).scheduled,
-                    arr: estArr ?? new Date(new Date((station.arrival ?? station.departure).scheduled).valueOf() + trainDelay),
-                    dep: estDep ?? new Date(new Date((station.departure ?? station.arrival).scheduled).valueOf() + trainDelay),
+                    arr:
+                      estArr ??
+                      new Date(
+                        new Date(
+                          (station.arrival ?? station.departure).scheduled
+                        ).valueOf() + trainDelay
+                      ),
+                    dep:
+                      estDep ??
+                      new Date(
+                        new Date(
+                          (station.departure ?? station.arrival).scheduled
+                        ).valueOf() + trainDelay
+                      ),
                     arrCmnt: "",
                     depCmnt: "",
                     status: station.eta === "ARR" ? "Departed" : "Enroute",
@@ -634,6 +666,7 @@ const updateTrains = async () => {
           })
           .catch((e) => {
             console.log("Error fetching train data:", e);
+            shitsFucked = true;
           });
       });
     })

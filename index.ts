@@ -444,7 +444,7 @@ const updateTrains = async () => {
                   }
 
                   allStations[station.code].trains.push(
-                    `${actualTrainNum}-${rawTrainData.instance.split("-")[1]}`
+                    `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
                   );
 
                   if (station.arrival && station.arrival.estimated) {

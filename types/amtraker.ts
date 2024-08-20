@@ -62,6 +62,7 @@ export interface StationMeta {
   tz: string;
   lat: number;
   lon: number;
+  hasAddress: boolean;
   address1: string;
   address2: string;
   city: string;

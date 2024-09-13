@@ -70,6 +70,7 @@ const viaURL = "https://tsimobile.viarail.ca/data/allData.json";
 const amtrakerCache = new cache();
 let decryptedTrainData = "";
 let decryptedStationData = "";
+let AllTTMTrains = "";
 
 //https://stackoverflow.com/questions/196972/convert-string-to-title-case-with-javascript
 const title = (str: string) => {
@@ -351,6 +352,16 @@ const parseRawStation = (rawStation: RawStation, debug: boolean = false) => {
 const updateTrains = async () => {
   console.log("Updating trains...");
   shitsFucked = false;
+
+  // getting allttmtrains for ASMAD
+  fetch("https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains")
+    .then((res) => res.text())
+    .then((data) => {
+      AllTTMTrains = data;
+    })
+    .catch((e) => {
+      console.log('AllTTMTrains fetch error')
+    })
 
   fetchViaForCleaning()
     .then((viaData) => {
@@ -751,6 +762,15 @@ Bun.serve({
 
     if (url === "/v3/rawStations") {
       return new Response(decryptedStationData, {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
+    }
+
+    if (url === "/v3/AllTTMTrains") {
+      return new Response(AllTTMTrains, {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

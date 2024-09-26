@@ -54,6 +54,7 @@ export interface Station {
   arrCmnt: string;
   depCmnt: string;
   status: string;
+  platform: string;
 }
 
 export interface StationMeta {

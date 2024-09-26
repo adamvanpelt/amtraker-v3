@@ -1,3 +1,5 @@
+// so much goop god this needs a hell of a rewrite
+
 import * as crypto from "crypto-js";
 import moment from "moment-timezone";
 import * as schedule from "node-schedule";
@@ -20,7 +22,7 @@ import { trainNames, viaTrainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import cache from "./cache";
 
-import rawStations from "./rawStations.json";
+const rawStations = JSON.parse(fs.readFileSync("./rawStations.json", { encoding: "utf8" }));
 
 import length from "@turf/length";
 import along from "@turf/along";
@@ -346,6 +348,7 @@ const parseRawStation = (rawStation: RawStation, debug: boolean = false) => {
     arrCmnt: arrCmnt ?? depCmnt,
     depCmnt: depCmnt ?? arrCmnt,
     status: status,
+    platform: "",
   } as Station;
 };
 
@@ -354,14 +357,16 @@ const updateTrains = async () => {
   shitsFucked = false;
 
   // getting allttmtrains for ASMAD
-  fetch(`https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`)
+  fetch(
+    `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
+  )
     .then((res) => res.text())
     .then((data) => {
       AllTTMTrains = data;
     })
     .catch((e) => {
-      console.log('AllTTMTrains fetch error')
-    })
+      console.log("AllTTMTrains fetch error");
+    });
 
   fetchViaForCleaning()
     .then((viaData) => {
@@ -493,6 +498,7 @@ const updateTrains = async () => {
                     arrCmnt: "",
                     depCmnt: "",
                     status: station.eta === "ARR" ? "Departed" : "Enroute",
+                    platform: "",
                   };
                 }),
                 heading: ccDegToCardinal(rawTrainData.direction),
@@ -977,10 +983,4 @@ Bun.serve({
       status: 404,
     });
   },
-  tls: process.env.USE_SSL
-    ? {
-        key: Bun.file("/etc/letsencrypt/live/new.amtraker.com/privkey.pem"),
-        cert: Bun.file("/etc/letsencrypt/live/new.amtraker.com/fullchain.pem"),
-      }
-    : undefined,
 });

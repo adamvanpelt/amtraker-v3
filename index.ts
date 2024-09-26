@@ -107,7 +107,7 @@ const decrypt = (content, key) => {
 };
 
 const fetchAmtrakTrainsForCleaning = async () => {
-  const response = await fetch(amtrakTrainsURL);
+  const response = await fetch(amtrakTrainsURL + `?${Date.now()}=true`);
   const data = await response.text();
 
   console.log("fetch in t");
@@ -135,7 +135,7 @@ const fetchAmtrakTrainsForCleaning = async () => {
 };
 
 const fetchAmtrakStationsForCleaning = async () => {
-  const response = await fetch(amtrakStationsURL);
+  const response = await fetch(amtrakStationsURL + `?${Date.now()}=true`);
   const data = await response.text();
 
   const mainContent = data.substring(0, data.length - masterSegment);
@@ -162,7 +162,7 @@ const fetchAmtrakStationsForCleaning = async () => {
 };
 
 const fetchViaForCleaning = async () => {
-  const response = await fetch(viaURL);
+  const response = await fetch(viaURL + `?${Date.now()}=true`);
   const data = await response.json();
 
   return data;
@@ -354,7 +354,7 @@ const updateTrains = async () => {
   shitsFucked = false;
 
   // getting allttmtrains for ASMAD
-  fetch("https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains")
+  fetch(`https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`)
     .then((res) => res.text())
     .then((data) => {
       AllTTMTrains = data;

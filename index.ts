@@ -370,7 +370,11 @@ const updateTrains = async () => {
     });
 
   const platformRes = await fetch("https://platformsapi.amtraker.com/stations");
-  trainPlatforms = await platformRes.json();
+  try {
+    trainPlatforms = await platformRes.json();
+  } catch (e) {
+    trainPlatforms = {};
+  }
 
   fetchViaForCleaning()
     .then((viaData) => {

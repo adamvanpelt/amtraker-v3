@@ -73,6 +73,7 @@ const amtrakerCache = new cache();
 let decryptedTrainData = "";
 let decryptedStationData = "";
 let AllTTMTrains = "";
+let trainPlatforms = {};
 
 //https://stackoverflow.com/questions/196972/convert-string-to-title-case-with-javascript
 const title = (str: string) => {
@@ -262,7 +263,7 @@ const generateCmnt = (
   }
 };
 
-const parseRawStation = (rawStation: RawStation, debug: boolean = false) => {
+const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug: boolean = false) => {
   let status: StationStatus;
   let arr: string;
   let dep: string;
@@ -348,7 +349,7 @@ const parseRawStation = (rawStation: RawStation, debug: boolean = false) => {
     arrCmnt: arrCmnt ?? depCmnt,
     depCmnt: depCmnt ?? arrCmnt,
     status: status,
-    platform: "",
+    platform: trainPlatforms[rawStation.code] && trainPlatforms[rawStation.code][rawTrainNum] ? trainPlatforms[rawStation.code][rawTrainNum] : "",
   } as Station;
 };
 
@@ -367,6 +368,9 @@ const updateTrains = async () => {
     .catch((e) => {
       console.log("AllTTMTrains fetch error");
     });
+
+  const platformRes = await fetch("https://platformsapi.amtraker.com/stations");
+  trainPlatforms = await platformRes.json();
 
   fetchViaForCleaning()
     .then((viaData) => {
@@ -573,7 +577,7 @@ const updateTrains = async () => {
                   }
                 }
 
-                const result = parseRawStation(station); //, rawTrainData.TrainNum == "784");
+                const result = parseRawStation(station, rawTrainData.TrainNum); //, rawTrainData.TrainNum == "784");
 
                 return result;
               });

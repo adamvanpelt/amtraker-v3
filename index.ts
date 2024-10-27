@@ -445,18 +445,13 @@ const updateTrains = async () => {
                   stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
                 stations: sortedStations.map((station) => {
-                  //if (!stationMetaData.viaCoords[station.code]) {
-                  //  console.log(station.code)
-                  //  console.log(station)
-                  //}
-
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
                       name: stationMetaData.viaStationNames[station.code],
                       code: station.code,
-                      tz: stationMetaData.viatimeZones[station.code],
-                      lat: stationMetaData.viaCoords[station.code][0],
-                      lon: stationMetaData.viaCoords[station.code][1],
+                      tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
+                      lat: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][0] : 0,
+                      lon: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][1] : 0,
                       hasAddress: false,
                       address1: "",
                       address2: "",

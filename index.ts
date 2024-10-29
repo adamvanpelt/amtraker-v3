@@ -473,7 +473,7 @@ const updateTrains = async () => {
                     arrCmnt: "",
                     depCmnt: "",
                     status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
-                    platform: brightlinePlatforms[prediction.stationID] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
+                    platform: brightlinePlatforms[prediction.stationID] && brightlinePlatforms[prediction.stationID][trainNum] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
                   };
                 }),
                 heading: ccDegToCardinal(rawTrainData.heading),

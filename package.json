@@ -16,6 +16,7 @@
     "crypto-js": "^4.1.1",
     "fast-xml-parser": "^4.4.0",
     "geo-tz": "^7.0.2",
+    "gtfs-realtime-bindings": "^1.1.1",
     "moment": "2.29.4",
     "moment-duration-format": "2.3.2",
     "moment-timezone": "0.5.34",

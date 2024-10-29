@@ -57,6 +57,7 @@ let staleData = {
 };
 
 let shitsFucked = false;
+let shitsFuckedSource = "";
 
 const amtrakTrainsURL =
   "https://maps.amtrak.com/services/MapDataService/trains/getTrainsData";
@@ -74,6 +75,8 @@ let decryptedTrainData = "";
 let decryptedStationData = "";
 let AllTTMTrains = "";
 let trainPlatforms = {};
+let brightlineData = {};
+let brightlinePlatforms = {};
 
 //https://stackoverflow.com/questions/196972/convert-string-to-title-case-with-javascript
 const title = (str: string) => {
@@ -133,6 +136,7 @@ const fetchAmtrakTrainsForCleaning = async () => {
     return JSON.parse(decryptedData).features;
   } catch (e) {
     shitsFucked = true;
+    shitsFuckedSource = "Amtrak";
     return [];
   }
 };
@@ -165,10 +169,16 @@ const fetchAmtrakStationsForCleaning = async () => {
 };
 
 const fetchViaForCleaning = async () => {
-  const response = await fetch(viaURL + `?${Date.now()}=true`);
-  const data = await response.json();
+  try {
+    const response = await fetch(viaURL + `?${Date.now()}=true`);
+    const data = await response.json();
 
-  return data;
+    return data;
+  } catch (e) {
+    console.log(e);
+    throw new Error('VIA');
+    return {};
+  }
 };
 
 const parseDate = (badDate: string | null, code: string | null) => {
@@ -356,6 +366,7 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
 const updateTrains = async () => {
   console.log("Updating trains...");
   shitsFucked = false;
+  shitsFuckedSource = "";
 
   // getting allttmtrains for ASMAD
   fetch(
@@ -375,6 +386,11 @@ const updateTrains = async () => {
   } catch (e) {
     trainPlatforms = {};
   }
+
+  const brightlineRes = await fetch('https://store.transitstat.us/brightline');
+  const rawBrightline = await brightlineRes.json();
+  brightlineData = rawBrightline['v1'];
+  brightlinePlatforms = rawBrightline['platforms'];
 
   fetchViaForCleaning()
     .then((viaData) => {
@@ -409,6 +425,87 @@ const updateTrains = async () => {
             let trains: TrainResponse = {};
             let allStations: StationResponse = {};
 
+            Object.keys(brightlineData['trains']).forEach((trainNum) => {
+              const rawTrainData = brightlineData['trains'][trainNum];
+              const firstStation = rawTrainData['predictions'][0];
+              const lastStation = rawTrainData['predictions'].splice(-1)[0];
+              const trainEventStation = rawTrainData['predictions'].filter((station) => station.dep >= Date.now())[0] ?? lastStation;
+
+              let train: Train = {
+                routeName: 'Brightline',
+                trainNum: 'b' + trainNum,
+                trainID: 'b' + trainNum + '-' + new Date(firstStation.dep).getDate(),
+                lat: rawTrainData['lat'],
+                lon: rawTrainData['lon'],
+                trainTimely: "",
+                stations: rawTrainData.predictions.map((prediction) => {
+                  const actualID = 'B' + prediction.stationID;
+                  if (!allStations[actualID]) {
+                    allStations[actualID] = {
+                      name: prediction.stationName,
+                      code: actualID,
+                      tz: prediction.tz,
+                      lat: brightlineData['stations'][prediction['stationID']]['lat'],
+                      lon: brightlineData['stations'][prediction['stationID']]['lon'],
+                      hasAddress: false,
+                      address1: "",
+                      address2: "",
+                      city: "",
+                      state: "",
+                      zip: 0,
+                      trains: [],
+                    }
+                  }
+
+                  allStations[actualID].trains.push(
+                    'b' + trainNum + '-' + new Date(firstStation.dep).getDate()
+                  );
+
+                  return {
+                    name: prediction['stationName'],
+                    code: actualID,
+                    tz: prediction['tz'],
+                    bus: false,
+                    schArr: new Date(prediction['arr'] - prediction['arrDelay']).toISOString(),
+                    schDep: new Date(prediction['dep'] - prediction['depDelay']).toISOString(),
+                    arr: new Date(prediction['arr']).toISOString(),
+                    dep: new Date(prediction['dep']).toISOString(),
+                    arrCmnt: "",
+                    depCmnt: "",
+                    status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
+                    platform: brightlinePlatforms[prediction.stationID] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
+                  };
+                }),
+                heading: ccDegToCardinal(rawTrainData.heading),
+                eventCode: 'B' + trainEventStation.stationID,
+                eventTZ: trainEventStation.tz,
+                eventName: trainEventStation.stationName,
+                origCode: 'B' + firstStation.stationID,
+                originTZ: firstStation.tz,
+                origName: firstStation.stationName,
+                destCode: 'B' + lastStation.stationID,
+                destTZ: lastStation.tz,
+                destName: lastStation.stationName,
+                trainState: "Active",
+                velocity: 0, // no data unfortunately
+                statusMsg: " ",
+                createdAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+                updatedAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+                lastValTS: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+                objectID: Number(trainNum),
+                provider: "Brightline",
+              };
+
+              if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
+              trains['b' + trainNum].push(train);
+
+              if (train.trainState === "Active") {
+                staleData.avgLastUpdate +=
+                  nowCleaning - new Date(train.updatedAt).valueOf();
+                staleData.activeTrains++;
+              }
+            })
+
             Object.keys(viaData).forEach((trainNum) => {
               const rawTrainData = viaData[trainNum];
               const actualTrainNum = "v" + trainNum.split(" ")[0];
@@ -434,9 +531,8 @@ const updateTrains = async () => {
                   viaTrainNames[trainNum.split(" ")[0]] ??
                   `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
                 trainNum: `${actualTrainNum}`,
-                trainID: `${actualTrainNum}-${
-                  rawTrainData.instance.split("-")[2]
-                }`,
+                trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]
+                  }`,
                 lat:
                   rawTrainData.lat ??
                   stationMetaData.viaCoords[firstStation.code][0],

@@ -636,9 +636,9 @@ const updateTrains = async () => {
 
               let rawStations: Array<RawStation> = [];
 
-              for (let i = 1; i < 41; i++) {
+              for (let i = 1; i < 47; i++) {
                 let station = rawTrainData[`Station${i}`];
-                if (station == undefined) {
+                if (station == undefined || !station) {
                   continue;
                 } else {
                   try {

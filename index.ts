@@ -277,8 +277,7 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
   let status: StationStatus;
   let arr: string;
   let dep: string;
-  let arrCmnt: string = "";
-  let depCmnt: string = "";
+  let iconColor: string;
 
   if (!rawStation.scharr && !rawStation.postarr) {
     //first station
@@ -356,8 +355,8 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
       parseDate(rawStation.scharr, rawStation.code),
     arr: arr ?? dep,
     dep: dep ?? arr,
-    arrCmnt: arrCmnt ?? depCmnt,
-    depCmnt: depCmnt ?? arrCmnt,
+    arrCmnt: "",
+    depCmnt: "",
     status: status,
     platform: trainPlatforms[rawStation.code] && trainPlatforms[rawStation.code][rawTrainNum] ? trainPlatforms[rawStation.code][rawTrainNum] : "",
   } as Station;
@@ -438,6 +437,7 @@ const updateTrains = async () => {
                 lat: rawTrainData['lat'],
                 lon: rawTrainData['lon'],
                 trainTimely: "",
+                iconColor: "#000000",
                 stations: rawTrainData.predictions.map((prediction) => {
                   const actualID = 'B' + prediction.stationID;
                   if (!allStations[actualID]) {
@@ -540,6 +540,7 @@ const updateTrains = async () => {
                   rawTrainData.lng ??
                   stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
+                iconColor: '#000000',
                 stations: sortedStations.map((station) => {
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
@@ -715,13 +716,8 @@ const updateTrains = async () => {
                 ).getDate()}`,
                 lat: property.geometry.coordinates[1],
                 lon: property.geometry.coordinates[0],
-                trainTimely: (
-                  stations.find(
-                    (station) => station.code === trainEventCode
-                  ) || {
-                    arrCmnt: "Unknown",
-                  }
-                ).arrCmnt,
+                trainTimely: "",
+                iconColor: "#000000",
                 stations: stations,
                 heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
                 eventCode: trainEventCode,

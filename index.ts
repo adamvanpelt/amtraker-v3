@@ -26,6 +26,7 @@ const rawStations = JSON.parse(fs.readFileSync("./rawStations.json", { encoding:
 
 import length from "@turf/length";
 import along from "@turf/along";
+import calculateIconColor from "./calculateIconColor";
 
 const snowPiercerShape = JSON.parse(
   fs.readFileSync("./snowPiercer.json", "utf8")
@@ -277,7 +278,6 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
   let status: StationStatus;
   let arr: string;
   let dep: string;
-  let iconColor: string;
 
   if (!rawStation.scharr && !rawStation.postarr) {
     //first station
@@ -437,7 +437,7 @@ const updateTrains = async () => {
                 lat: rawTrainData['lat'],
                 lon: rawTrainData['lon'],
                 trainTimely: "",
-                iconColor: "#000000",
+                iconColor: "#212529",
                 stations: rawTrainData.predictions.map((prediction) => {
                   const actualID = 'B' + prediction.stationID;
                   if (!allStations[actualID]) {
@@ -496,6 +496,8 @@ const updateTrains = async () => {
                 provider: "Brightline",
               };
 
+              train.iconColor = calculateIconColor(train);
+
               if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
               trains['b' + trainNum].push(train);
 
@@ -540,7 +542,7 @@ const updateTrains = async () => {
                   rawTrainData.lng ??
                   stationMetaData.viaCoords[firstStation.code][1],
                 trainTimely: "",
-                iconColor: '#000000',
+                iconColor: '#212529',
                 stations: sortedStations.map((station) => {
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
@@ -620,6 +622,8 @@ const updateTrains = async () => {
                 objectID: rawTrainData.OBJECTID,
                 provider: "Via",
               };
+
+              train.iconColor = calculateIconColor(train);
 
               if (!trains[actualTrainNum]) trains[actualTrainNum] = [];
               trains[actualTrainNum].push(train);
@@ -717,7 +721,7 @@ const updateTrains = async () => {
                 lat: property.geometry.coordinates[1],
                 lon: property.geometry.coordinates[0],
                 trainTimely: "",
-                iconColor: "#000000",
+                iconColor: "#212529",
                 stations: stations,
                 heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
                 eventCode: trainEventCode,
@@ -752,6 +756,8 @@ const updateTrains = async () => {
                 objectID: rawTrainData.OBJECTID,
                 provider: "Amtrak",
               };
+
+              train.iconColor = calculateIconColor(train);
 
               if (!trains[rawTrainData.TrainNum])
                 trains[rawTrainData.TrainNum] = [];

@@ -433,6 +433,7 @@ const updateTrains = async () => {
               let train: Train = {
                 routeName: 'Brightline',
                 trainNum: 'b' + trainNum,
+                trainNumRaw: trainNum,
                 trainID: 'b' + trainNum + '-' + new Date(firstStation.dep).getDate(),
                 lat: rawTrainData['lat'],
                 lon: rawTrainData['lon'],
@@ -534,6 +535,7 @@ const updateTrains = async () => {
                   viaTrainNames[trainNum.split(" ")[0]] ??
                   `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
                 trainNum: `${actualTrainNum}`,
+                trainNumRaw: trainNum.split(" ")[0],
                 trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]
                   }`,
                 lat:
@@ -717,6 +719,7 @@ const updateTrains = async () => {
                   ? trainNames[+rawTrainData.TrainNum]
                   : rawTrainData.RouteName,
                 trainNum: `${+rawTrainData.TrainNum}`,
+                trainNumRaw: `${+rawTrainData.TrainNum}`,
                 trainID: `${+rawTrainData.TrainNum}-${new Date(
                   stations[0].schDep
                 ).getDate()}`,

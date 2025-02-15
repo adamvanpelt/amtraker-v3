@@ -25,6 +25,7 @@ export interface Train {
   lastValTS: string;
   objectID: number;
   provider: string;
+  providerShort: string;
 }
 
 export enum Heading {

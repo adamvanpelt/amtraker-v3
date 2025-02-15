@@ -494,6 +494,7 @@ const updateTrains = async () => {
                 lastValTS: brightlineData['lastUpdated'] ?? new Date().toISOString(),
                 objectID: Number(trainNum),
                 provider: "Brightline",
+                providerShort: "BLNE",
               };
 
               train.iconColor = calculateIconColor(train);
@@ -621,6 +622,7 @@ const updateTrains = async () => {
                 lastValTS: rawTrainData.poll ?? new Date().toISOString(),
                 objectID: rawTrainData.OBJECTID,
                 provider: "Via",
+                providerShort: "VIA",
               };
 
               train.iconColor = calculateIconColor(train);
@@ -755,6 +757,7 @@ const updateTrains = async () => {
                   stations[0].schDep,
                 objectID: rawTrainData.OBJECTID,
                 provider: "Amtrak",
+                providerShort: "AMTK",
               };
 
               train.iconColor = calculateIconColor(train);

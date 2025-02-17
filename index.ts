@@ -20,6 +20,7 @@ import {
 
 import { trainNames, viaTrainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
+import { amtrakStationCodeReplacements, viaStationInfoReplacements } from './data/sharedStations';
 import cache from "./cache";
 
 const rawStations = JSON.parse(fs.readFileSync("./rawStations.json", { encoding: "utf8" }));
@@ -279,6 +280,8 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
   let arr: string;
   let dep: string;
 
+  const actualCode = amtrakStationCodeReplacements[rawStation.code] ?? rawStation.code;
+
   if (!rawStation.scharr && !rawStation.postarr) {
     //first station
     if (rawStation.postdep) {
@@ -286,9 +289,6 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
       if (debug) console.log("First station departed:", rawStation.code);
     }
   }
-
-  if (debug && (rawStation.code === "OXN" || rawStation.code === "SBA"))
-    console.log(rawStation);
 
   if (rawStation.estarr == null && rawStation.postarr == null) {
     // is this the first station
@@ -344,7 +344,7 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
 
   return {
     name: stationMetaData.stationNames[rawStation.code],
-    code: rawStation.code,
+    code: actualCode,
     tz: stationMetaData.timeZones[rawStation.code],
     bus: rawStation.bus,
     schArr:
@@ -396,9 +396,11 @@ const updateTrains = async () => {
       fetchAmtrakStationsForCleaning().then((stationData) => {
         console.log("fetched s");
         stationData.forEach((station) => {
-          amtrakerCache.setStation(station.properties.Code, {
-            name: stationMetaData.stationNames[station.properties.Code],
-            code: station.properties.Code,
+          const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
+
+          amtrakerCache.setStation(actualCode, {
+            name: stationMetaData.stationNames[station.properties.code],
+            code: actualCode,
             tz: stationMetaData.timeZones[station.properties.Code],
             lat: station.properties.lat,
             lon: station.properties.lon,
@@ -662,11 +664,13 @@ const updateTrains = async () => {
               }
 
               let stations = rawStations.map((station) => {
-                if (!allStations[station.code]) {
-                  if (!amtrakerCache.stationExists(station.code)) {
-                    amtrakerCache.setStation(station.code, {
+                const actualCode = amtrakStationCodeReplacements[station.code] ?? station.code;
+
+                if (!allStations[actualCode]) {
+                  if (!amtrakerCache.stationExists(actualCode)) {
+                    amtrakerCache.setStation(actualCode, {
                       name: stationMetaData.stationNames[station.code],
-                      code: station.code,
+                      code: actualCode,
                       tz: stationMetaData.timeZones[station.code],
                       lat: 0,
                       lon: 0,
@@ -713,6 +717,9 @@ const updateTrains = async () => {
                 enrouteStations.length === 0
                   ? stations[stations.length - 1].code
                   : enrouteStations[0].code;
+              const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode];
+              const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
+              const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;
 
               let train: Train = {
                 routeName: trainNames[+rawTrainData.TrainNum]
@@ -729,13 +736,13 @@ const updateTrains = async () => {
                 iconColor: "#212529",
                 stations: stations,
                 heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
-                eventCode: trainEventCode,
+                eventCode: actualTrainEventCode,
                 eventTZ: stationMetaData.timeZones[trainEventCode],
                 eventName: stationMetaData.stationNames[trainEventCode],
-                origCode: rawTrainData.OrigCode,
+                origCode: actualOrigCode,
                 originTZ: stationMetaData.timeZones[rawTrainData.OrigCode],
                 origName: stationMetaData.stationNames[rawTrainData.OrigCode],
-                destCode: rawTrainData.DestCode,
+                destCode: actualDestCode,
                 destTZ: stationMetaData.timeZones[rawTrainData.DestCode],
                 destName: stationMetaData.stationNames[rawTrainData.DestCode],
                 trainState: rawTrainData.TrainState,

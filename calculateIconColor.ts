@@ -57,8 +57,6 @@ const calculateIconColor = (train: Train) => {
     );
   }
 
-  const trainNum = train.trainNum ? train.trainNum.toString() : "NULL";
-
   let trainIconState = "default";
 
   if (trainStatus) {

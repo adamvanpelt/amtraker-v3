@@ -1,0 +1,75 @@
+{
+  "Alexandria": [
+    "ALX",
+    "ALEX"
+  ],
+  "Aldershot": [
+    "AST",
+    "ALDR"
+  ],
+  "Grimsby": [
+    "GMS",
+    "GRIM"
+  ],
+  "Hinton": [
+    "HIN",
+    "HINT"
+  ],
+  "Hope": [
+    "HOP",
+    "HOPE"
+  ],
+  "Houston": [
+    "HOS",
+    "HOUS"
+  ],
+  "Kingston": [
+    "KIN",
+    "KGON"
+  ],
+  "McGregor": [
+    "MCG",
+    "MCGR"
+  ],
+  "Niagara Falls": [
+    "NFL",
+    "NFS",
+    "NIAG"
+  ],
+  "Oakville": [
+    "OKL",
+    "OAKV"
+  ],
+  "Orlando": [
+    "ORL",
+    "BMCO"
+  ],
+  "St. Catharines": [
+    "SCA",
+    "SCAT"
+  ],
+  "Sanford": [
+    "SFA",
+    "SANF"
+  ],
+  "Saint-Lambert": [
+    "SLQ",
+    "SLAM"
+  ],
+  "Summit": [
+    "SMT",
+    "SMQU"
+  ],
+  "Vancouver": [
+    "VAN",
+    "VCVR"
+  ],
+  "Windsor": [
+    "WND",
+    "WDON"
+  ],
+  "West Palm Beach": [
+    "WPB",
+    "BWPT"
+  ]
+}

@@ -717,7 +717,7 @@ const updateTrains = async () => {
                 enrouteStations.length === 0
                   ? stations[stations.length - 1].code
                   : enrouteStations[0].code;
-              const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode] ?? rawTrainData.OrigCode;
+              const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode] ?? trainEventCode;
               const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
               const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;
 

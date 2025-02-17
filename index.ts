@@ -20,7 +20,7 @@ import {
 
 import { trainNames, viaTrainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
-import { amtrakStationCodeReplacements, viaStationInfoReplacements } from './data/sharedStations';
+import { amtrakStationCodeReplacements } from './data/sharedStations';
 import cache from "./cache";
 
 const rawStations = JSON.parse(fs.readFileSync("./rawStations.json", { encoding: "utf8" }));
@@ -399,7 +399,7 @@ const updateTrains = async () => {
           const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
 
           amtrakerCache.setStation(actualCode, {
-            name: stationMetaData.stationNames[station.properties.code],
+            name: stationMetaData.stationNames[station.properties.Code],
             code: actualCode,
             tz: stationMetaData.timeZones[station.properties.Code],
             lat: station.properties.lat,

@@ -23,12 +23,13 @@ const hsvToRgb = (h: number, s: number, v: number) => {
   return `#${componentToHex(f(5))}${componentToHex(f(3))}${componentToHex(f(1))}`;
 };
 
-const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => ((x - minX) * (maxY - minY) / (maxX - minX) + minY);
+const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => (((x - minX) * (maxY - minY)) / (maxX - minX)) + minY;
 
 const calculateColorInRange = (minutesLate, maxMinutesLate) => {
-  let actualHue = reinterprolateValue(minutesLate, 0, maxMinutesLate, 132, -12);
-  let actualSaturation = reinterprolateValue(minutesLate, 0, maxMinutesLate, .69, .94);
-  let actualValue = reinterprolateValue(minutesLate, 0, maxMinutesLate, .54, .78);
+  const actualMinutesLate = Math.min(minutesLate, maxMinutesLate);
+  let actualHue = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, 132, -12);
+  let actualSaturation = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .69, .94);
+  let actualValue = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .54, .78);
 
   if (actualHue < 0) actualHue += 360;
 
@@ -79,8 +80,8 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
 
   const minutesLate = ((actual - sched) / 60000);
 
-  const color =  calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
-  //console.log(color)
+  const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
+  if (train.trainNum == '97') console.log(color)
   return color;
 }
 

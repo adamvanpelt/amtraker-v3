@@ -721,15 +721,22 @@ const updateTrains = async () => {
               const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
               const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;
 
+              // i hate this more than you do
+              const originDateOfMonth = new Intl.DateTimeFormat('en-US',
+                {
+                  timeZone: stationMetaData.timeZones[rawTrainData.OrigCode],
+                  day: 'numeric'
+                })
+                .format(new Date(
+                  stations[0].schDep));
+                
               let train: Train = {
                 routeName: trainNames[+rawTrainData.TrainNum]
                   ? trainNames[+rawTrainData.TrainNum]
                   : rawTrainData.RouteName,
                 trainNum: `${+rawTrainData.TrainNum}`,
                 trainNumRaw: `${+rawTrainData.TrainNum}`,
-                trainID: `${+rawTrainData.TrainNum}-${new Date(
-                  stations[0].schDep
-                ).getDate()}`,
+                trainID: `${+rawTrainData.TrainNum}-${originDateOfMonth}`,
                 lat: property.geometry.coordinates[1],
                 lon: property.geometry.coordinates[0],
                 trainTimely: "",

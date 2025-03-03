@@ -1,4 +1,7 @@
-import { Train } from "./types/amtraker";
+import { Train, StationResponse } from "./types/amtraker";
+import { trainLengths } from "./data/trains";
+import { lineString } from "@turf/helpers";
+import length from "@turf/length";
 
 const colors = {
   early: "#2b8a3e",
@@ -7,33 +10,40 @@ const colors = {
   default: "#212529",
 };
 
-const toHoursAndMinutesLate = (date1: Date, date2: Date): string => {
-  if (
-    date1.toString() === "Invalid Date" ||
-    date2.toString() === "Invalid Date"
-  )
-    return "Estimate Error";
-
-  const diff = date1.valueOf() - date2.valueOf();
-
-  if (Math.abs(diff) > 1000 * 60 * 60 * 24) return "Schedule Error";
-
-  const hours = Math.floor(Math.abs(diff) / 1000 / 60 / 60);
-  const minutes = Math.floor((Math.abs(diff) / 1000 / 60 / 60 - hours) * 60);
-
-  // creating the text
-  let amount = `${Math.abs(hours)}h ${Math.abs(minutes)}m`;
-  if (hours === 0) amount = `${Math.abs(minutes)}m`;
-  if (minutes === 0) amount = `${Math.abs(hours)}h`;
-
-  //on time
-  if (diff === 0) return "On Time";
-
-  //late or early
-  return diff > 0 ? `${amount} late` : `${amount} early`;
+// https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
+const componentToHex = (c) => {
+  const trueValue = Math.min(Math.max(Math.floor(c * 255), 0), 255);
+  var hex = trueValue.toString(16);
+  return hex.padStart(2, '0');
 };
 
-const calculateIconColor = (train: Train) => {
+// https://stackoverflow.com/questions/17242144/javascript-convert-hsb-hsv-color-to-rgb-accurately
+const hsvToRgb = (h: number, s: number, v: number) => {
+  let f = (n, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0);
+  return `#${componentToHex(f(5))}${componentToHex(f(3))}${componentToHex(f(1))}`;
+};
+
+const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => ((x - minX) * (maxY - minY) / (maxX - minX) + minY);
+
+const calculateColorInRange = (minutesLate, maxMinutesLate) => {
+  let actualHue = reinterprolateValue(minutesLate, 0, maxMinutesLate, 132, -12);
+  let actualSaturation = reinterprolateValue(minutesLate, 0, maxMinutesLate, .69, .94);
+  let actualValue = reinterprolateValue(minutesLate, 0, maxMinutesLate, .54, .78);
+
+  if (actualHue < 0) actualHue += 360;
+
+  return hsvToRgb(actualHue, actualSaturation, actualValue);
+};
+
+const calculateIconColor = (train: Train, allStations: StationResponse) => {
+  if (
+    train.trainState.includes("Cancelled") ||
+    train.trainState.includes("Completed") ||
+    train.trainState.includes("Predeparture")
+  ) {
+    return '#212529';
+  }
+
   //canadian border crossing shenanigans
   if (train.eventCode == "CBN") {
     const stationCodes = train.stations.map((station) => station.code);
@@ -48,37 +58,30 @@ const calculateIconColor = (train: Train) => {
     (station) => station.code === train.eventCode
   );
 
-  let trainStatus: string = 'Unknown';
+  const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));
+  const trainRouteLength = length(basicRouteLine, { units: 'miles' });
 
-  if (currentStation) {
-    trainStatus = toHoursAndMinutesLate(
-      new Date(currentStation.arr ?? currentStation.dep ?? null),
-      new Date(currentStation.schArr ?? currentStation.schDep ?? null)
-    );
-  }
+  // these are very similar to what ASM does
+  // brightline trains are treated the same as via corridor trains and amtrak acela trains
+  let routeMaxTimeFrameLate = 180; // 550+ mile Amtrak
 
-  let trainIconState = "default";
+  if (trainRouteLength < 550) routeMaxTimeFrameLate = 150;
+  if (trainRouteLength < 450) routeMaxTimeFrameLate = 120;
+  if (trainRouteLength < 350) routeMaxTimeFrameLate = 90;
+  if (trainRouteLength < 250) routeMaxTimeFrameLate = 60;
 
-  if (trainStatus) {
-    if (trainStatus.includes("early") || trainStatus.includes("On Time")) {
-      trainIconState = 'early';
-    }
+  //route specific
+  if (train.provider == 'Via') routeMaxTimeFrameLate = 360;
+  if (train.routeName == 'Corridor' || train.routeName == 'Acela' || train.routeName == 'Brightline') routeMaxTimeFrameLate = 60;
 
-    if (trainStatus.includes("late") || trainStatus.includes("NaN")) {
-      trainIconState = 'late';
-    }
+  const actual = new Date(currentStation.arr ?? currentStation.dep).valueOf();
+  const sched = new Date(currentStation.schArr ?? currentStation.schDep).valueOf();
 
-    if (
-      train.trainState.includes("Cancelled") ||
-      train.trainState.includes("Completed") ||
-      train.trainState.includes("Predeparture") ||
-      trainStatus.includes('Unknown')
-    ) {
-      trainIconState = 'default';
-    }
-  }
+  const minutesLate = ((actual - sched) / 60000);
 
-  return colors[trainIconState];
+  const color =  calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
+  //console.log(color)
+  return color;
 }
 
 export default calculateIconColor;

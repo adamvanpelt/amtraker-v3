@@ -827,7 +827,7 @@ export const viaTrainNames = {
   693: "Hudson Bay",
 };
 
-export const trainTypes = {
+export const trainLengths = {
   "Sunset Limited": 1995,
   "Southwest Chief": 2526,
   "California Zephyr": 2438,

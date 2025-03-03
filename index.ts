@@ -392,6 +392,9 @@ const updateTrains = async () => {
   brightlineData = rawBrightline['v1'];
   brightlinePlatforms = rawBrightline['platforms'];
 
+  let trains: TrainResponse = {};
+  let allStations: StationResponse = {};
+
   fetchViaForCleaning()
     .then((viaData) => {
       fetchAmtrakStationsForCleaning().then((stationData) => {
@@ -399,7 +402,7 @@ const updateTrains = async () => {
         stationData.forEach((station) => {
           const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
 
-          amtrakerCache.setStation(actualCode, {
+          const stationObj = {
             name: stationMetaData.stationNames[station.properties.Code],
             code: actualCode,
             tz: stationMetaData.timeZones[station.properties.Code],
@@ -412,7 +415,10 @@ const updateTrains = async () => {
             state: station.properties.State,
             zip: station.properties.Zipcode,
             trains: [],
-          });
+          };
+
+          if (!allStations[actualCode]) allStations[actualCode] = stationObj;
+          amtrakerCache.setStation(actualCode, stationObj);
         });
 
         fetchAmtrakTrainsForCleaning()
@@ -423,9 +429,6 @@ const updateTrains = async () => {
             staleData.activeTrains = 0;
             staleData.avgLastUpdate = 0;
             staleData.stale = false;
-
-            let trains: TrainResponse = {};
-            let allStations: StationResponse = {};
 
             Object.keys(brightlineData['trains']).forEach((trainNum) => {
               const rawTrainData = brightlineData['trains'][trainNum];
@@ -501,7 +504,7 @@ const updateTrains = async () => {
                 providerShort: "BLNE",
               };
 
-              train.iconColor = calculateIconColor(train);
+              train.iconColor = calculateIconColor(train, allStations);
 
               if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
               trains['b' + trainNum].push(train);
@@ -630,7 +633,7 @@ const updateTrains = async () => {
                 providerShort: "VIA",
               };
 
-              train.iconColor = calculateIconColor(train);
+              train.iconColor = calculateIconColor(train, allStations);
 
               if (!trains[actualTrainNum]) trains[actualTrainNum] = [];
               trains[actualTrainNum].push(train);
@@ -691,15 +694,6 @@ const updateTrains = async () => {
                 return result;
               });
 
-              let stationsFixed = stations.map((station, i, arr) => {
-                if (!station.arr && !station.dep) {
-                  if (i === 0) return station; //cant really fix this
-
-                  const lastStation = arr[i - 1];
-                  if (!lastStation.dep && !lastStation.schDep) return station; //dont have the data
-                }
-              });
-
               if (stations.length === 0) {
                 console.log(
                   "No stations found for train:",
@@ -730,7 +724,7 @@ const updateTrains = async () => {
                 })
                 .format(new Date(
                   stations[0].schDep));
-                
+
               let train: Train = {
                 routeName: trainNames[+rawTrainData.TrainNum]
                   ? trainNames[+rawTrainData.TrainNum]
@@ -778,7 +772,7 @@ const updateTrains = async () => {
                 providerShort: "AMTK",
               };
 
-              train.iconColor = calculateIconColor(train);
+              train.iconColor = calculateIconColor(train, allStations);
 
               if (!trains[rawTrainData.TrainNum])
                 trains[rawTrainData.TrainNum] = [];

@@ -109,6 +109,7 @@ const decrypt = (content, key) => {
     crypto.PBKDF2(key, crypto.enc.Hex.parse(sValue), {
       keySize: 4,
       iterations: 1e3,
+      hasher: crypto.algo.SHA1 // thank you cabalex!
     }),
     { iv: crypto.enc.Hex.parse(iValue) }
   ).toString(crypto.enc.Utf8);

@@ -64,9 +64,8 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
 
   // these are very similar to what ASM does
   // brightline trains are treated the same as via corridor trains and amtrak acela trains
-  let routeMaxTimeFrameLate = 180; // 550+ mile Amtrak
+  let routeMaxTimeFrameLate = 150; // 550+ mile Amtrak
 
-  if (trainRouteLength < 550) routeMaxTimeFrameLate = 150;
   if (trainRouteLength < 450) routeMaxTimeFrameLate = 120;
   if (trainRouteLength < 350) routeMaxTimeFrameLate = 90;
   if (trainRouteLength < 250) routeMaxTimeFrameLate = 60;

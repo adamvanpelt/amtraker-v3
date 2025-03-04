@@ -60,10 +60,11 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
   );
 
   try {
-    const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));
-    
-    if (train.trainID == 'v55-03') console.log(JSON.stringify(basicRouteLine));
-    
+    if (train.stations.length == 1) {
+      train.stations = [train.stations[0], train.stations[0]] // bruh
+    }
+
+    const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));    
     const trainRouteLength = length(basicRouteLine, { units: 'miles' });
 
     // these are very similar to what ASM does
@@ -87,10 +88,7 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
     if (train.trainNum == '97') console.log(color)
     return color;
   } catch (e) {
-    console.log(train)
-    train.stations.forEach((station) => {
-      console.log(allStations[station.code])
-    })
+    console.log('calculating train color error:', train)
     return '#212529';
   }
 }

@@ -28,8 +28,8 @@ const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number
 const calculateColorInRange = (minutesLate, maxMinutesLate) => {
   const actualMinutesLate = Math.min(minutesLate, maxMinutesLate);
   let actualHue = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, 132, -12);
-  let actualSaturation = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .69, .94);
-  let actualValue = .78 //reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .54, .78);
+  let actualSaturation = .94 //reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .69, .94);
+  let actualValue = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .54, .78);
 
   if (actualHue < 0) actualHue += 360;
 

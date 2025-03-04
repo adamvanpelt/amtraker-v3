@@ -59,29 +59,40 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
     (station) => station.code === train.eventCode
   );
 
-  const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));
-  const trainRouteLength = length(basicRouteLine, { units: 'miles' });
+  try {
+    const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));
+    
+    if (train.trainID == 'v55-03') console.log(JSON.stringify(basicRouteLine));
+    
+    const trainRouteLength = length(basicRouteLine, { units: 'miles' });
 
-  // these are very similar to what ASM does
-  // brightline trains are treated the same as via corridor trains and amtrak acela trains
-  let routeMaxTimeFrameLate = 150; // 550+ mile Amtrak
+    // these are very similar to what ASM does
+    // brightline trains are treated the same as via corridor trains and amtrak acela trains
+    let routeMaxTimeFrameLate = 150; // 550+ mile Amtrak
 
-  if (trainRouteLength < 450) routeMaxTimeFrameLate = 120;
-  if (trainRouteLength < 350) routeMaxTimeFrameLate = 90;
-  if (trainRouteLength < 250) routeMaxTimeFrameLate = 60;
+    if (trainRouteLength < 450) routeMaxTimeFrameLate = 120;
+    if (trainRouteLength < 350) routeMaxTimeFrameLate = 90;
+    if (trainRouteLength < 250) routeMaxTimeFrameLate = 60;
 
-  //route specific
-  if (train.provider == 'Via') routeMaxTimeFrameLate = 360;
-  if (train.routeName == 'Corridor' || train.routeName == 'Acela' || train.routeName == 'Brightline') routeMaxTimeFrameLate = 60;
+    //route specific
+    if (train.provider == 'Via') routeMaxTimeFrameLate = 360;
+    if (train.routeName == 'Corridor' || train.routeName == 'Acela' || train.routeName == 'Brightline') routeMaxTimeFrameLate = 60;
 
-  const actual = new Date(currentStation.arr ?? currentStation.dep).valueOf();
-  const sched = new Date(currentStation.schArr ?? currentStation.schDep).valueOf();
+    const actual = new Date(currentStation.arr ?? currentStation.dep).valueOf();
+    const sched = new Date(currentStation.schArr ?? currentStation.schDep).valueOf();
 
-  const minutesLate = ((actual - sched) / 60000);
+    const minutesLate = ((actual - sched) / 60000);
 
-  const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
-  if (train.trainNum == '97') console.log(color)
-  return color;
+    const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
+    if (train.trainNum == '97') console.log(color)
+    return color;
+  } catch (e) {
+    console.log(train)
+    train.stations.forEach((station) => {
+      console.log(allStations[station.code])
+    })
+    return '#212529';
+  }
 }
 
 export default calculateIconColor;

@@ -511,7 +511,7 @@ const updateTrains = async () => {
 
               if (train.trainState === "Active") {
                 staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.updatedAt).valueOf();
+                  nowCleaning - new Date(train.lastValTS).valueOf();
                 staleData.activeTrains++;
               }
             })
@@ -640,7 +640,7 @@ const updateTrains = async () => {
 
               if (train.trainState === "Active") {
                 staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.updatedAt).valueOf();
+                  nowCleaning - new Date(train.lastValTS).valueOf();
                 staleData.activeTrains++;
               }
             });
@@ -780,7 +780,7 @@ const updateTrains = async () => {
 
               if (train.trainState === "Active") {
                 staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.updatedAt).valueOf();
+                  nowCleaning - new Date(train.lastValTS).valueOf();
                 staleData.activeTrains++;
               }
             });

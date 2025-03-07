@@ -25,11 +25,45 @@ const hsvToRgb = (h: number, s: number, v: number) => {
 
 const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => (((x - minX) * (maxY - minY)) / (maxX - minX)) + minY;
 
-const calculateColorInRange = (minutesLate, maxMinutesLate) => {
-  const actualMinutesLate = Math.min(minutesLate, maxMinutesLate);
-  let actualHue = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, 132, -12);
-  let actualSaturation = .94 //reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .69, .94);
-  let actualValue = reinterprolateValue(actualMinutesLate, 0, maxMinutesLate, .54, .78);
+const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
+  const actualMinutesLate = Math.min(Math.max(minutesLate, 0), maxMinutesLate);
+
+  const colorPercents = [
+    {
+      minutes: 0,
+      hsv: [132, 0.69, 0.54]
+    },
+    {
+      minutes: maxMinutesLate * 0.25,
+      hsv: [35, 0.93, 0.54]
+    },
+    {
+      minutes: maxMinutesLate,
+      hsv: [-12, 0.94, 0.78]
+    }
+  ];
+
+  let lowPoint: any = 0;
+  let highPoint: any = colorPercents.length - 1;
+
+  for (let i = 0; i < colorPercents.length; i++) {
+    const point = colorPercents[i];
+
+    if (point.minutes < minutesLate) lowPoint = i;
+    if (point.minutes >= minutesLate) {
+      highPoint = i;
+      break;
+    }
+
+    if (i == colorPercents.length - 1) highPoint = i; // has to be the high point
+  };
+
+  lowPoint = colorPercents[lowPoint];
+  highPoint = colorPercents[highPoint];
+
+  let actualHue = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[0], highPoint.hsv[0]);
+  let actualSaturation = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[1], highPoint.hsv[1]);
+  let actualValue = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[2], highPoint.hsv[2]);
 
   if (actualHue < 0) actualHue += 360;
 
@@ -64,7 +98,7 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
       train.stations = [train.stations[0], train.stations[0]] // bruh
     }
 
-    const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));    
+    const basicRouteLine = lineString(train.stations.map((station) => [allStations[station.code].lon, allStations[station.code].lat]));
     const trainRouteLength = length(basicRouteLine, { units: 'miles' });
 
     // these are very similar to what ASM does
@@ -85,7 +119,9 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
     const minutesLate = ((actual - sched) / 60000);
 
     const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
-    if (train.trainNum == '97') console.log(color)
+    if (train.trainID == '69-6') {
+      console.log(minutesLate, routeMaxTimeFrameLate, color)
+    }
     return color;
   } catch (e) {
     console.log('calculating train color error:', train)

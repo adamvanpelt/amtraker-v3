@@ -128,10 +128,10 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
 
     const minutesLate = ((actual - sched) / 60000);
 
+    if (isNaN(minutesLate)) return '#212529';
+
     const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
-    if (train.trainID == '5-6') {
-      console.log(minutesLate, routeMaxTimeFrameLate, color)
-    }
+
     return color;
   } catch (e) {
     console.log('calculating train color error:', train)

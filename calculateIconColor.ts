@@ -43,27 +43,37 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
     }
   ];
 
-  let lowPoint: any = 0;
-  let highPoint: any = colorPercents.length - 1;
+  let lowPointIndex = 0;
+  let highPointIndex = colorPercents.length - 1;
 
   for (let i = 0; i < colorPercents.length; i++) {
     const point = colorPercents[i];
 
-    if (point.minutes < minutesLate) lowPoint = i;
+    if (point.minutes < minutesLate) lowPointIndex = i;
     if (point.minutes >= minutesLate) {
-      highPoint = i;
+      highPointIndex = i;
       break;
     }
 
-    if (i == colorPercents.length - 1) highPoint = i; // has to be the high point
+    if (i == colorPercents.length - 1) highPointIndex = i; // has to be the high point
   };
 
-  lowPoint = colorPercents[lowPoint];
-  highPoint = colorPercents[highPoint];
+  const lowPoint = colorPercents[lowPointIndex];
+  const highPoint = colorPercents[highPointIndex];
+
+  if (lowPoint.minutes == highPoint.minutes) return hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]);
 
   let actualHue = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[0], highPoint.hsv[0]);
   let actualSaturation = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[1], highPoint.hsv[1]);
   let actualValue = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[2], highPoint.hsv[2]);
+
+  // fallback
+  // NaN really only appears at the if above, but im not trying to be too careful
+  if (
+    isNaN(actualHue) ||
+    isNaN(actualSaturation) ||
+    isNaN(actualValue)
+  ) return "#f542d7"; // return hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]);
 
   if (actualHue < 0) actualHue += 360;
 
@@ -119,7 +129,7 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
     const minutesLate = ((actual - sched) / 60000);
 
     const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
-    if (train.trainID == '69-6') {
+    if (train.trainID == '5-6') {
       console.log(minutesLate, routeMaxTimeFrameLate, color)
     }
     return color;

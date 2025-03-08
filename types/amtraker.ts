@@ -57,6 +57,7 @@ export interface Station {
   arrCmnt: string;
   depCmnt: string;
   status: string;
+  stopIconColor: string;
   platform: string;
 }
 

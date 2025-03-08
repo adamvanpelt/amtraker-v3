@@ -1,14 +1,6 @@
-import { Train, StationResponse } from "./types/amtraker";
-import { trainLengths } from "./data/trains";
+import { Train, StationResponse, Station } from "./types/amtraker";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
-
-const colors = {
-  early: "#2b8a3e",
-  onTime: "#1864ab",
-  late: "#c60c30",
-  default: "#212529",
-};
 
 // https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb
 const componentToHex = (c) => {
@@ -80,14 +72,18 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
   return hsvToRgb(actualHue, actualSaturation, actualValue);
 };
 
-const calculateIconColor = (train: Train, allStations: StationResponse) => {
+const calculateIconColor = (train: Train, allStations: StationResponse, activeStationOverride: string = null) => {
   if (
-    train.trainState.includes("Cancelled") ||
-    train.trainState.includes("Completed") ||
-    train.trainState.includes("Predeparture")
+    !activeStationOverride && (
+      train.trainState.includes("Cancelled") ||
+      train.trainState.includes("Completed") ||
+      train.trainState.includes("Predeparture")
+    )
   ) {
     return '#212529';
   }
+
+  if (activeStationOverride) train.eventCode = activeStationOverride;
 
   //canadian border crossing shenanigans
   if (train.eventCode == "CBN") {
@@ -137,6 +133,6 @@ const calculateIconColor = (train: Train, allStations: StationResponse) => {
     console.log('calculating train color error:', train)
     return '#212529';
   }
-}
+};
 
 export default calculateIconColor;

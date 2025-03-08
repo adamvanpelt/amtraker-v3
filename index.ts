@@ -59,7 +59,6 @@ let staleData = {
 };
 
 let shitsFucked = false;
-let shitsFuckedSource = "";
 
 const amtrakTrainsURL =
   "https://maps.amtrak.com/services/MapDataService/trains/getTrainsData";
@@ -139,7 +138,6 @@ const fetchAmtrakTrainsForCleaning = async () => {
     return JSON.parse(decryptedData).features;
   } catch (e) {
     shitsFucked = true;
-    shitsFuckedSource = "Amtrak";
     return [];
   }
 };
@@ -359,14 +357,14 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
     arrCmnt: "",
     depCmnt: "",
     status: status,
+    stopIconColor: "#212529",
     platform: trainPlatforms[rawStation.code] && trainPlatforms[rawStation.code][rawTrainNum] ? trainPlatforms[rawStation.code][rawTrainNum] : "",
-  } as Station;
+  } as Station
 };
 
 const updateTrains = async () => {
   console.log("Updating trains...");
   shitsFucked = false;
-  shitsFuckedSource = "";
 
   // getting allttmtrains for ASMAD
   fetch(
@@ -480,6 +478,7 @@ const updateTrains = async () => {
                     arrCmnt: "",
                     depCmnt: "",
                     status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
+                    stopIconColor: "#212529",
                     platform: brightlinePlatforms[prediction.stationID] && brightlinePlatforms[prediction.stationID][trainNum] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
                   };
                 }),
@@ -505,6 +504,12 @@ const updateTrains = async () => {
               };
 
               train.iconColor = calculateIconColor(train, allStations);
+              train.stations = train.stations.map((stationRaw) => {
+                return {
+                  ...stationRaw,
+                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code),
+                }
+              });
 
               if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
               trains['b' + trainNum].push(train);
@@ -609,6 +614,7 @@ const updateTrains = async () => {
                     arrCmnt: "",
                     depCmnt: "",
                     status: station.eta === "ARR" ? "Departed" : "Enroute",
+                    stopIconColor: "#212529",
                     platform: "",
                   };
                 }),
@@ -634,6 +640,12 @@ const updateTrains = async () => {
               };
 
               train.iconColor = calculateIconColor(train, allStations);
+              train.stations = train.stations.map((stationRaw) => {
+                return {
+                  ...stationRaw,
+                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code),
+                }
+              });
 
               if (!trains[actualTrainNum]) trains[actualTrainNum] = [];
               trains[actualTrainNum].push(train);
@@ -773,6 +785,12 @@ const updateTrains = async () => {
               };
 
               train.iconColor = calculateIconColor(train, allStations);
+              train.stations = train.stations.map((stationRaw) => {
+                return {
+                  ...stationRaw,
+                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code),
+                }
+              });
 
               if (!trains[rawTrainData.TrainNum])
                 trains[rawTrainData.TrainNum] = [];

@@ -720,10 +720,11 @@ const updateTrains = async () => {
                     station.status === "Station") &&
                   (station.arr || station.dep)
               );
-              const trainEventCode =
-                enrouteStations.length === 0
-                  ? stations[stations.length - 1].code
-                  : enrouteStations[0].code;
+
+              //if (property.properties.TrainNum == "41") console.log(property.properties);
+
+              const trainEventCode = property.properties.EventCode ??
+                enrouteStations.length === 0 ? stations[stations.length - 1].code : enrouteStations[0].code;
               const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode] ?? trainEventCode;
               const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
               const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;

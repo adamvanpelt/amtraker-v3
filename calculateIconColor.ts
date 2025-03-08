@@ -83,20 +83,22 @@ const calculateIconColor = (train: Train, allStations: StationResponse, activeSt
     return '#212529';
   }
 
-  if (activeStationOverride) train.eventCode = activeStationOverride;
+  let eventCode = train.eventCode;
+
+  if (activeStationOverride) eventCode = activeStationOverride;
 
   //canadian border crossing shenanigans
-  if (train.eventCode == "CBN") {
+  if (eventCode == "CBN") {
     const stationCodes = train.stations.map((station) => station.code);
     if (stationCodes.indexOf("NFS") < stationCodes.indexOf("NFL")) {
-      train.eventCode = "NFL";
+      eventCode = "NFL";
     } else {
-      train.eventCode = "NFS";
+      eventCode = "NFS";
     }
   }
 
   const currentStation = train.stations.find(
-    (station) => station.code === train.eventCode
+    (station) => station.code === eventCode
   );
 
   try {

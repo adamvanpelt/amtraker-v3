@@ -659,7 +659,6 @@ const updateTrains = async () => {
 
             amtrakData.forEach((property) => {
               let rawTrainData = property.properties;
-              //console.log(property)
 
               let rawStations: Array<RawStation> = [];
 
@@ -721,8 +720,7 @@ const updateTrains = async () => {
                   (station.arr || station.dep)
               );
 
-              const trainEventCode = property.properties.EventCode ??
-                (enrouteStations.length === 0 ? stations[stations.length - 1].code : enrouteStations[0].code);
+              const trainEventCode = enrouteStations.length == 0 ? stations[stations.length - 1].code : enrouteStations[0].code;
               const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode] ?? trainEventCode;
               const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
               const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;

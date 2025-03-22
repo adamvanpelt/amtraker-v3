@@ -501,6 +501,7 @@ const updateTrains = async () => {
                 objectID: Number(trainNum),
                 provider: "Brightline",
                 providerShort: "BLNE",
+                onlyOfTrainNum: true,
               };
 
               train.iconColor = calculateIconColor(train, allStations);
@@ -637,6 +638,7 @@ const updateTrains = async () => {
                 objectID: rawTrainData.OBJECTID,
                 provider: "Via",
                 providerShort: "VIA",
+                onlyOfTrainNum: true,
               };
 
               train.iconColor = calculateIconColor(train, allStations);
@@ -779,6 +781,7 @@ const updateTrains = async () => {
                 objectID: rawTrainData.OBJECTID,
                 provider: "Amtrak",
                 providerShort: "AMTK",
+                onlyOfTrainNum: true,
               };
 
               train.iconColor = calculateIconColor(train, allStations);
@@ -799,6 +802,12 @@ const updateTrains = async () => {
                 staleData.activeTrains++;
               }
             });
+
+            Object.keys(trains).forEach((trainNum) => {
+              trains[trainNum].forEach((train, i, arr) => {
+                trains[trainNum][i].onlyOfTrainNum = arr.length <= 1; // this should be an == but edge cases be damned
+              })
+            })
 
             staleData.avgLastUpdate =
               staleData.avgLastUpdate / staleData.activeTrains;

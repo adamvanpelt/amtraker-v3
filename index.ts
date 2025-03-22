@@ -792,8 +792,7 @@ const updateTrains = async () => {
                 }
               });
 
-              if (!trains[rawTrainData.TrainNum])
-                trains[rawTrainData.TrainNum] = [];
+              if (!trains[rawTrainData.TrainNum]) trains[rawTrainData.TrainNum] = [];
               trains[rawTrainData.TrainNum].push(train);
 
               if (train.trainState === "Active") {
@@ -803,10 +802,20 @@ const updateTrains = async () => {
               }
             });
 
+            // setting onlyOfTrainNum and deduplicating at the same time
             Object.keys(trains).forEach((trainNum) => {
+              // deduplicating trains with the same ID
+              let trainIDs = [];
+              trains[trainNum] = trains[trainNum].filter((train) => {
+                if (trainIDs.includes(train.trainID)) return false;
+                trainIDs.push(train.trainID);
+                return true;
+              });
+
+              // setting onlyOfTrainNum 
               trains[trainNum].forEach((train, i, arr) => {
                 trains[trainNum][i].onlyOfTrainNum = arr.length <= 1; // this should be an == but edge cases be damned
-              })
+              });
             })
 
             staleData.avgLastUpdate =

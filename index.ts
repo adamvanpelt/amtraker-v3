@@ -552,10 +552,10 @@ const updateTrains = async () => {
                   }`,
                 lat:
                   rawTrainData.lat ??
-                  stationMetaData.viaCoords[firstStation.code][0],
+                  stationMetaData.viaCoords[trainEventStation.code][0],
                 lon:
                   rawTrainData.lng ??
-                  stationMetaData.viaCoords[firstStation.code][1],
+                  stationMetaData.viaCoords[trainEventStation.code][1],
                 trainTimely: "",
                 iconColor: '#212529',
                 stations: sortedStations.map((station) => {

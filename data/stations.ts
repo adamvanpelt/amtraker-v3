@@ -95,7 +95,7 @@ export const stationNames = {
   COC: "Corcoran",
   CWH: "Cornwells Heights",
   CRF: "Crawfordsville",
-  CRH: "Charry Hill",
+  CRH: "Cherry Hill",
   CRN: "Creston",
   CRT: "Croton-Harmon",
   CLM: "Claremont",

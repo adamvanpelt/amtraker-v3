@@ -65,7 +65,7 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
     isNaN(actualHue) ||
     isNaN(actualSaturation) ||
     isNaN(actualValue)
-  ) return "#f542d7"; // return hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]);
+  ) return hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]);
 
   if (actualHue < 0) actualHue += 360;
 
@@ -111,7 +111,7 @@ const calculateIconColor = (train: Train, allStations: StationResponse, activeSt
 
     // these are very similar to what ASM does
     // brightline trains are treated the same as via corridor trains and amtrak acela trains
-    let routeMaxTimeFrameLate = 150; // 550+ mile Amtrak
+    let routeMaxTimeFrameLate = 150; // 450+ mile Amtrak
 
     if (trainRouteLength < 450) routeMaxTimeFrameLate = 120;
     if (trainRouteLength < 350) routeMaxTimeFrameLate = 90;

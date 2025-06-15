@@ -4,7 +4,6 @@ import {
   Train,
   TrainResponse,
 } from "./types/amtraker";
-import * as fs from "fs";
 
 export default class cache {
   trains: TrainResponse;
@@ -54,14 +53,11 @@ export default class cache {
         });
 
         const trainOriginDate = new Date(train.stations[0].schDep);
-        tempIDs.push(
-          `${train.trainNum}-${
-            trainOriginDate.getMonth() + 1
-          }-${trainOriginDate.getDate()}-${trainOriginDate
-            .getFullYear()
-            .toString()
-            .slice(-2)}`
-        );
+        const trainOriginMonth = new Intl.DateTimeFormat([], { month: 'numeric', timeZone: train.stations[0].tz }).format(trainOriginDate);
+        const trainOriginDay = new Intl.DateTimeFormat([], { day: 'numeric', timeZone: train.stations[0].tz }).format(trainOriginDate);
+        const trainOriginYear = new Intl.DateTimeFormat([], { year: '2-digit', timeZone: train.stations[0].tz }).format(trainOriginDate);
+
+        tempIDs.push(`${train.trainNum}-${trainOriginMonth}-${trainOriginDay}-${trainOriginYear}`);
       });
     });
 

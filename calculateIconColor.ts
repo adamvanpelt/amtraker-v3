@@ -10,13 +10,14 @@ const componentToHex = (c) => {
 };
 
 // https://stackoverflow.com/questions/17242144/javascript-convert-hsb-hsv-color-to-rgb-accurately
-const hsvToRgb = (h: number, s: number, v: number) => {
+const hsvToRgb = (h: number, s: number, v: number, returnComponents: boolean = false): any => {
   let f = (n, k = (n + h / 60) % 6) => v - v * s * Math.max(Math.min(k, 4 - k, 1), 0);
+  if (returnComponents) return [f(5) * 255, f(3) * 255, f(1) * 255];
   return `#${componentToHex(f(5))}${componentToHex(f(3))}${componentToHex(f(1))}`;
 };
 
 // https://stackoverflow.com/questions/3423214/convert-hsb-hsv-color-to-hsl
-const hsvToHsl = (h,s,v,l=v-v*s/2, m=Math.min(l,1-l)) => [h,m?(v-l)/m:0,l];
+const hsvToHsl = (h, s, v, l = v - v * s / 2, m = Math.min(l, 1 - l)) => [h, m ? (v - l) / m : 0, l];
 
 const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => (((x - minX) * (maxY - minY)) / (maxX - minX)) + minY;
 
@@ -78,11 +79,12 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
 
   if (actualHue < 0) actualHue += 360;
 
-  const hslColor = hsvToHsl(actualHue / 360, actualSaturation, actualValue);
+  const rgbComponents = hsvToRgb(actualHue, actualSaturation, actualValue, true);
+  const greyscaleValue = (rgbComponents[0] * 0.299) + (rgbComponents[1] * 0.587) + (rgbComponents[1] * 0.114);
 
   return {
     color: hsvToRgb(actualHue, actualSaturation, actualValue),
-    text: hslColor[2] > 0.179 ? "#000000" : "#ffffff"
+    text: greyscaleValue > 0.179 ? "#000000" : "#ffffff",
   }
 };
 

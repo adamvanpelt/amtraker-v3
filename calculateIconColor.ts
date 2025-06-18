@@ -82,9 +82,11 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
   const rgbComponents = hsvToRgb(actualHue, actualSaturation, actualValue, true);
   const greyscaleValue = (rgbComponents[0] * 0.299) + (rgbComponents[1] * 0.587) + (rgbComponents[1] * 0.114);
 
+  //console.log(greyscaleValue)
+
   return {
     color: hsvToRgb(actualHue, actualSaturation, actualValue),
-    text: greyscaleValue > 0.179 ? "#000000" : "#ffffff",
+    text: greyscaleValue > 179 ? "#000000" : "#ffffff",
   }
 };
 

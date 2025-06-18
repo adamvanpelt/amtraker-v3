@@ -27,7 +27,7 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
     },
     {
       minutes: maxMinutesLate * 0.25,
-      hsv: [35, 0.93, 0.54]
+      hsv: [35, 0.93, 0.78]
     },
     {
       minutes: maxMinutesLate,

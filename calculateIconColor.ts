@@ -86,7 +86,7 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number, acti
 
   return {
     color: hsvToRgb(actualHue, actualSaturation, actualValue),
-    text: greyscaleValue > 150 ? "#000000" : "#ffffff",
+    text: greyscaleValue > 145 ? "#000000" : "#ffffff",
   }
 };
 

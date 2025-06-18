@@ -21,7 +21,7 @@ const hsvToHsl = (h, s, v, l = v - v * s / 2, m = Math.min(l, 1 - l)) => [h, m ?
 
 const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => (((x - minX) * (maxY - minY)) / (maxX - minX)) + minY;
 
-const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
+const calculateColorInRange = (minutesLate: number, maxMinutesLate: number, activeStationOverride: string = null) => {
   const actualMinutesLate = Math.min(Math.max(minutesLate, 0), maxMinutesLate);
 
   const colorPercents = [
@@ -82,11 +82,11 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
   const rgbComponents = hsvToRgb(actualHue, actualSaturation, actualValue, true);
   const greyscaleValue = (rgbComponents[0] * 0.299) + (rgbComponents[1] * 0.587) + (rgbComponents[1] * 0.114);
 
-  //console.log(greyscaleValue)
+  if (!activeStationOverride) console.log(greyscaleValue)
 
   return {
     color: hsvToRgb(actualHue, actualSaturation, actualValue),
-    text: greyscaleValue > 179 ? "#000000" : "#ffffff",
+    text: greyscaleValue > 150 ? "#000000" : "#ffffff",
   }
 };
 
@@ -152,7 +152,7 @@ const calculateIconColor = (train: Train, allStations: StationResponse, activeSt
       text: '#ffffff',
     }
 
-    return calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
+    return calculateColorInRange(minutesLate, routeMaxTimeFrameLate, activeStationOverride);
   } catch (e) {
     console.log('calculating train color error:', train)
     return {

@@ -385,6 +385,8 @@ const updateTrains = async () => {
     trainPlatforms = {};
   }
 
+  const amtrakAlertsData = await fetch("https://store.transitstat.us/amtrak_alerts").then((res) => res.json());
+
   const brightlineRes = await fetch('https://store.transitstat.us/brightline');
   const rawBrightline = await brightlineRes.json();
   brightlineData = rawBrightline['v1'];
@@ -502,6 +504,7 @@ const updateTrains = async () => {
                 provider: "Brightline",
                 providerShort: "BLNE",
                 onlyOfTrainNum: true,
+                alerts: [],
               };
 
               train.iconColor = calculateIconColor(train, allStations);
@@ -639,6 +642,7 @@ const updateTrains = async () => {
                 provider: "Via",
                 providerShort: "VIA",
                 onlyOfTrainNum: true,
+                alerts: [],
               };
 
               train.iconColor = calculateIconColor(train, allStations);
@@ -782,6 +786,7 @@ const updateTrains = async () => {
                 provider: "Amtrak",
                 providerShort: "AMTK",
                 onlyOfTrainNum: true,
+                alerts: amtrakAlertsData['trains'][`${+rawTrainData.TrainNum}-${originDateOfMonth}`] ?? [],
               };
 
               train.iconColor = calculateIconColor(train, allStations);

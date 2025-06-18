@@ -445,6 +445,7 @@ const updateTrains = async () => {
                 lon: rawTrainData['lon'],
                 trainTimely: "",
                 iconColor: "#212529",
+                textColor: "#ffffff",
                 stations: rawTrainData.predictions.map((prediction) => {
                   const actualID = 'B' + prediction.stationID;
                   if (!allStations[actualID]) {
@@ -507,11 +508,13 @@ const updateTrains = async () => {
                 alerts: [],
               };
 
-              train.iconColor = calculateIconColor(train, allStations);
+              const calculatedColors = calculateIconColor(train, allStations);
+              train.iconColor = calculatedColors['color'];
+              train.textColor = calculatedColors['text'];
               train.stations = train.stations.map((stationRaw) => {
                 return {
                   ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code),
+                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
                 }
               });
 
@@ -561,6 +564,7 @@ const updateTrains = async () => {
                   stationMetaData.viaCoords[trainEventStation.code][1],
                 trainTimely: "",
                 iconColor: '#212529',
+                textColor: '#ffffff',
                 stations: sortedStations.map((station) => {
                   if (!allStations[station.code]) {
                     allStations[station.code] = {
@@ -645,11 +649,13 @@ const updateTrains = async () => {
                 alerts: [],
               };
 
-              train.iconColor = calculateIconColor(train, allStations);
+              const calculatedColors = calculateIconColor(train, allStations);
+              train.iconColor = calculatedColors['color'];
+              train.textColor = calculatedColors['text'];
               train.stations = train.stations.map((stationRaw) => {
                 return {
                   ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code),
+                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
                 }
               });
 
@@ -751,6 +757,7 @@ const updateTrains = async () => {
                 lon: property.geometry.coordinates[0],
                 trainTimely: "",
                 iconColor: "#212529",
+                textColor: "#ffffff",
                 stations: stations,
                 heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
                 eventCode: actualTrainEventCode,
@@ -789,11 +796,13 @@ const updateTrains = async () => {
                 alerts: amtrakAlertsData['trains'][`${+rawTrainData.TrainNum}-${originDateOfMonth}`] ?? [],
               };
 
-              train.iconColor = calculateIconColor(train, allStations);
+              const calculatedColors = calculateIconColor(train, allStations);
+              train.iconColor = calculatedColors['color'];
+              train.textColor = calculatedColors['text'];
               train.stations = train.stations.map((stationRaw) => {
                 return {
                   ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code),
+                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
                 }
               });
 

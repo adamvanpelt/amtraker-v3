@@ -15,6 +15,9 @@ const hsvToRgb = (h: number, s: number, v: number) => {
   return `#${componentToHex(f(5))}${componentToHex(f(3))}${componentToHex(f(1))}`;
 };
 
+// https://stackoverflow.com/questions/3423214/convert-hsb-hsv-color-to-hsl
+const hsvToHsl = (h,s,v,l=v-v*s/2, m=Math.min(l,1-l)) => [h,m?(v-l)/m:0,l];
+
 const reinterprolateValue = (x: number, minX: number, maxX: number, minY: number, maxY: number) => (((x - minX) * (maxY - minY)) / (maxX - minX)) + minY;
 
 const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
@@ -53,7 +56,10 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
   const lowPoint = colorPercents[lowPointIndex];
   const highPoint = colorPercents[highPointIndex];
 
-  if (lowPoint.minutes == highPoint.minutes) return hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]);
+  if (lowPoint.minutes == highPoint.minutes) return {
+    color: hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]),
+    text: "#ffffff"
+  }
 
   let actualHue = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[0], highPoint.hsv[0]);
   let actualSaturation = reinterprolateValue(actualMinutesLate, lowPoint.minutes, highPoint.minutes, lowPoint.hsv[1], highPoint.hsv[1]);
@@ -65,11 +71,19 @@ const calculateColorInRange = (minutesLate: number, maxMinutesLate: number) => {
     isNaN(actualHue) ||
     isNaN(actualSaturation) ||
     isNaN(actualValue)
-  ) return hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]);
+  ) return {
+    color: hsvToRgb(lowPoint.hsv[0], lowPoint.hsv[1], lowPoint.hsv[2]),
+    text: "#ffffff"
+  }
 
   if (actualHue < 0) actualHue += 360;
 
-  return hsvToRgb(actualHue, actualSaturation, actualValue);
+  const hslColor = hsvToHsl(actualHue / 360, actualSaturation, actualValue);
+
+  return {
+    color: hsvToRgb(actualHue, actualSaturation, actualValue),
+    text: hslColor[2] > 0.179 ? "#000000" : "#ffffff"
+  }
 };
 
 const calculateIconColor = (train: Train, allStations: StationResponse, activeStationOverride: string = null) => {
@@ -80,7 +94,10 @@ const calculateIconColor = (train: Train, allStations: StationResponse, activeSt
       train.trainState.includes("Predeparture")
     )
   ) {
-    return '#212529';
+    return {
+      color: '#212529',
+      text: '#ffffff',
+    }
   }
 
   let eventCode = train.eventCode;
@@ -126,14 +143,18 @@ const calculateIconColor = (train: Train, allStations: StationResponse, activeSt
 
     const minutesLate = ((actual - sched) / 60000);
 
-    if (isNaN(minutesLate)) return '#212529';
+    if (isNaN(minutesLate)) return {
+      color: '#212529',
+      text: '#ffffff',
+    }
 
-    const color = calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
-
-    return color;
+    return calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
   } catch (e) {
     console.log('calculating train color error:', train)
-    return '#212529';
+    return {
+      color: '#212529',
+      text: '#ffffff',
+    }
   }
 };
 

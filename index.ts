@@ -1095,6 +1095,8 @@ Bun.serve({
       const params = new URL(request.url).searchParams;
       const paramsObj = Object.fromEntries(params.entries());
 
+      if (!paramsObj.url) {paramsObj.url = 'https://amtraker.com/'};
+
       const requestedURL = new URL(paramsObj.url);
       const processedURL =
         requestedURL.origin + requestedURL.pathname + "?oembed";

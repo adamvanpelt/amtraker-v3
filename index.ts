@@ -432,6 +432,9 @@ const updateTrains = async () => {
 
             Object.keys(brightlineData['trains']).forEach((trainNum) => {
               const rawTrainData = brightlineData['trains'][trainNum];
+
+              if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
+
               const firstStation = rawTrainData['predictions'][0];
               const lastStation = rawTrainData['predictions'].slice(-1)[0];
               const trainEventStation = rawTrainData['predictions'].filter((station) => station.dep >= Date.now())[0] ?? lastStation;

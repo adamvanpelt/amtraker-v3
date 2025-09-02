@@ -644,6 +644,9 @@ const fallbackFromAny = (() => {
 
 const [safeLat, safeLon] = (eventCoords ?? fallbackFromRaw ?? fallbackFromAny ?? [0, 0]) as [number, number];
 
+// Ensure this exists so the map() below can safely update it
+let trainDelay = 0;
+
 let train: Train = {
   routeName:
     viaTrainNames[trainNum.split(" ")[0]] ??
@@ -678,36 +681,32 @@ let train: Train = {
       `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
     );
 
-    if (station.arrival?.estimated) {
+    // Update delay when VIA gives an estimated & scheduled arrival
+    if (station.arrival?.estimated && station.arrival?.scheduled) {
       trainDelay =
         new Date(station.arrival.estimated).valueOf() -
         new Date(station.arrival.scheduled).valueOf();
     }
 
-    const estArr = (station.arrival ?? station.departure)?.estimated;
-    const estDep = (station.departure ?? station.arrival)?.estimated;
+    // Safer field access
+    const baseArr = (station.arrival ?? station.departure);
+    const baseDep = (station.departure ?? station.arrival);
+    const estArr = baseArr?.estimated;
+    const estDep = baseDep?.estimated;
 
     return {
       name: stationMetaData.viaStationNames[station.code],
       code: station.code,
       tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
       bus: false,
-      schArr: (station.arrival ?? station.departure).scheduled,
-      schDep: (station.departure ?? station.arrival).scheduled,
+      schArr: baseArr?.scheduled,
+      schDep: baseDep?.scheduled,
       arr:
         estArr ??
-        new Date(
-          new Date(
-            (station.arrival ?? station.departure).scheduled
-          ).valueOf() + trainDelay
-        ),
+        new Date(new Date(baseArr?.scheduled ?? Date.now()).valueOf() + trainDelay),
       dep:
         estDep ??
-        new Date(
-          new Date(
-            (station.departure ?? station.arrival).scheduled
-          ).valueOf() + trainDelay
-        ),
+        new Date(new Date(baseDep?.scheduled ?? Date.now()).valueOf() + trainDelay),
       arrCmnt: "",
       depCmnt: "",
       status: station.eta === "ARR" ? "Departed" : "Enroute",

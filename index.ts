@@ -620,112 +620,123 @@ const updateTrains = async () => {
 
               const firstStation = sortedStations[0];
               const lastStation = sortedStations[sortedStations.length - 1];
-              const trainEventStation =
-                sortedStations.find((station) => station.eta !== "ARR") ??
-                firstStation;
+// Prefer next non-ARR event, else first with known coords, else first
+const trainEventStation =
+  sortedStations.find((s) => s.eta !== "ARR")
+  ?? sortedStations.find((s) => !!stationMetaData.viaCoords[s.code])
+  ?? firstStation;
 
-              let trainDelay = 0;
+const eventCode = trainEventStation?.code;
+const eventCoords = eventCode ? stationMetaData.viaCoords[eventCode] : undefined;
 
-              let train: Train = {
-                routeName:
-                  viaTrainNames[trainNum.split(" ")[0]] ??
-                  `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
-                trainNum: `${actualTrainNum}`,
-                trainNumRaw: trainNum.split(" ")[0],
-                trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]
-                  }`,
-                lat:
-                  rawTrainData.lat ??
-                  stationMetaData.viaCoords[trainEventStation.code][0],
-                lon:
-                  rawTrainData.lng ??
-                  stationMetaData.viaCoords[trainEventStation.code][1],
-                trainTimely: "",
-                iconColor: '#212529',
-                textColor: '#ffffff',
-                stations: sortedStations.map((station) => {
-                  if (!allStations[station.code]) {
-                    allStations[station.code] = {
-                      name: stationMetaData.viaStationNames[station.code],
-                      code: station.code,
-                      tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
-                      lat: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][0] : 0,
-                      lon: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][1] : 0,
-                      hasAddress: false,
-                      address1: "",
-                      address2: "",
-                      city: "",
-                      state: "",
-                      zip: 0,
-                      trains: [],
-                    };
-                  }
+// Fallbacks: raw lat/lng from VIA payload, else any station we have coords for, else [0,0]
+const fallbackFromRaw = (rawTrainData.lat != null && rawTrainData.lng != null)
+  ? [rawTrainData.lat, rawTrainData.lng] as [number, number]
+  : undefined;
 
-                  allStations[station.code].trains.push(
-                    `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
-                  );
+const fallbackFromAny = (() => {
+  for (const s of sortedStations) {
+    const c = stationMetaData.viaCoords[s.code];
+    if (c) return c as [number, number];
+  }
+  return undefined;
+})();
 
-                  if (station.arrival && station.arrival.estimated) {
-                    trainDelay =
-                      new Date(station.arrival.estimated).valueOf() -
-                      new Date(station.arrival.scheduled).valueOf();
-                  }
+const [safeLat, safeLon] = (eventCoords ?? fallbackFromRaw ?? fallbackFromAny ?? [0, 0]) as [number, number];
 
-                  const estArr = (station.arrival ?? station.departure)
-                    .estimated;
-                  const estDep = (station.departure ?? station.arrival)
-                    .estimated;
+let train: Train = {
+  routeName:
+    viaTrainNames[trainNum.split(" ")[0]] ??
+    `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
+  trainNum: `${actualTrainNum}`,
+  trainNumRaw: trainNum.split(" ")[0],
+  trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`,
+  lat: safeLat,
+  lon: safeLon,
+  trainTimely: "",
+  iconColor: '#212529',
+  textColor: '#ffffff',
+  stations: sortedStations.map((station) => {
+    if (!allStations[station.code]) {
+      allStations[station.code] = {
+        name: stationMetaData.viaStationNames[station.code],
+        code: station.code,
+        tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
+        lat: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][0] : 0,
+        lon: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][1] : 0,
+        hasAddress: false,
+        address1: "",
+        address2: "",
+        city: "",
+        state: "",
+        zip: 0,
+        trains: [],
+      };
+    }
 
-                  return {
-                    name: stationMetaData.viaStationNames[station.code],
-                    code: station.code,
-                    tz: stationMetaData.viatimeZones[station.code],
-                    bus: false,
-                    schArr: (station.arrival ?? station.departure).scheduled,
-                    schDep: (station.departure ?? station.arrival).scheduled,
-                    arr:
-                      estArr ??
-                      new Date(
-                        new Date(
-                          (station.arrival ?? station.departure).scheduled
-                        ).valueOf() + trainDelay
-                      ),
-                    dep:
-                      estDep ??
-                      new Date(
-                        new Date(
-                          (station.departure ?? station.arrival).scheduled
-                        ).valueOf() + trainDelay
-                      ),
-                    arrCmnt: "",
-                    depCmnt: "",
-                    status: station.eta === "ARR" ? "Departed" : "Enroute",
-                    stopIconColor: "#212529",
-                    platform: "",
-                  };
-                }),
-                heading: ccDegToCardinal(rawTrainData.direction),
-                eventCode: trainEventStation.code,
-                eventTZ: stationMetaData.viatimeZones[trainEventStation.code],
-                eventName: trainEventStation.code,
-                origCode: firstStation.code,
-                originTZ: stationMetaData.viatimeZones[firstStation.code],
-                origName: stationMetaData.viaStationNames[firstStation.code],
-                destCode: lastStation.code,
-                destTZ: stationMetaData.viatimeZones[lastStation.code],
-                destName: stationMetaData.viaStationNames[lastStation.code],
-                trainState: "Active",
-                velocity: (rawTrainData.speed ?? 0) * 0.621371, // i love metric lol
-                statusMsg: " ",
-                createdAt: rawTrainData.poll ?? new Date().toISOString(),
-                updatedAt: rawTrainData.poll ?? new Date().toISOString(),
-                lastValTS: rawTrainData.poll ?? new Date().toISOString(),
-                objectID: rawTrainData.OBJECTID,
-                provider: "Via",
-                providerShort: "VIA",
-                onlyOfTrainNum: true,
-                alerts: [],
-              };
+    allStations[station.code].trains.push(
+      `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
+    );
+
+    if (station.arrival?.estimated) {
+      trainDelay =
+        new Date(station.arrival.estimated).valueOf() -
+        new Date(station.arrival.scheduled).valueOf();
+    }
+
+    const estArr = (station.arrival ?? station.departure)?.estimated;
+    const estDep = (station.departure ?? station.arrival)?.estimated;
+
+    return {
+      name: stationMetaData.viaStationNames[station.code],
+      code: station.code,
+      tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
+      bus: false,
+      schArr: (station.arrival ?? station.departure).scheduled,
+      schDep: (station.departure ?? station.arrival).scheduled,
+      arr:
+        estArr ??
+        new Date(
+          new Date(
+            (station.arrival ?? station.departure).scheduled
+          ).valueOf() + trainDelay
+        ),
+      dep:
+        estDep ??
+        new Date(
+          new Date(
+            (station.departure ?? station.arrival).scheduled
+          ).valueOf() + trainDelay
+        ),
+      arrCmnt: "",
+      depCmnt: "",
+      status: station.eta === "ARR" ? "Departed" : "Enroute",
+      stopIconColor: "#212529",
+      platform: "",
+    };
+  }),
+  heading: ccDegToCardinal(rawTrainData.direction),
+  eventCode: eventCode ?? firstStation.code,
+  eventTZ: (eventCode && stationMetaData.viatimeZones[eventCode]) ?? "America/Toronto",
+  eventName: (eventCode && stationMetaData.viaStationNames[eventCode]) ?? (eventCode ?? ""),
+  origCode: firstStation.code,
+  originTZ: stationMetaData.viatimeZones[firstStation.code] ?? "America/Toronto",
+  origName: stationMetaData.viaStationNames[firstStation.code],
+  destCode: lastStation.code,
+  destTZ: stationMetaData.viatimeZones[lastStation.code] ?? "America/Toronto",
+  destName: stationMetaData.viaStationNames[lastStation.code],
+  trainState: "Active",
+  velocity: (rawTrainData.speed ?? 0) * 0.621371,
+  statusMsg: " ",
+  createdAt: rawTrainData.poll ?? new Date().toISOString(),
+  updatedAt: rawTrainData.poll ?? new Date().toISOString(),
+  lastValTS: rawTrainData.poll ?? new Date().toISOString(),
+  objectID: rawTrainData.OBJECTID,
+  provider: "Via",
+  providerShort: "VIA",
+  onlyOfTrainNum: true,
+  alerts: [],
+};
 
               const calculatedColors = calculateIconColor(train, allStations);
               train.iconColor = calculatedColors['color'];

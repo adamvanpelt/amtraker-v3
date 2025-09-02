@@ -29,6 +29,71 @@ import length from "@turf/length";
 import along from "@turf/along";
 import calculateIconColor from "./calculateIconColor";
 
+// ---- resilient fetch helpers ----
+type FetchFn<T> = (url: string) => Promise<T>;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function withTimeout(ms: number, signal?: AbortSignal) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort("timeout"), ms);
+  const composite = new AbortController();
+  const onAbort = () => composite.abort(signal?.reason ?? "aborted");
+  signal?.addEventListener("abort", onAbort, { once: true });
+
+  return {
+    signal: composite.signal,
+    clear: () => {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", onAbort);
+      controller.signal.aborted || controller.abort();
+    },
+  };
+}
+
+async function fetchTextWithRetry(
+  url: string,
+  {
+    attempts = 5,
+    baseDelayMs = 500,
+    timeoutMs = 8000,
+    tag = "fetchText",
+  }: { attempts?: number; baseDelayMs?: number; timeoutMs?: number; tag?: string } = {}
+): Promise<string> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    const jitter = Math.floor(Math.random() * baseDelayMs);
+    const delay = i === 0 ? 0 : baseDelayMs * 2 ** (i - 1) + jitter;
+    if (delay) await sleep(delay);
+
+    const { signal, clear } = withTimeout(timeoutMs);
+    try {
+      const res = await fetch(url, { signal });
+      clear();
+      if (!res.ok) throw new Error(`${tag}: HTTP ${res.status}`);
+      return await res.text();
+    } catch (e) {
+      clear();
+      lastErr = e;
+      console.log(`[${tag}] attempt ${i + 1}/${attempts} failed:`, (e as Error).message ?? e);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+async function fetchJsonWithRetry<T>(
+  url: string,
+  opts?: { attempts?: number; baseDelayMs?: number; timeoutMs?: number; tag?: string }
+): Promise<T> {
+  const txt = await fetchTextWithRetry(url, { tag: "fetchJson", ...opts });
+  try {
+    return JSON.parse(txt) as T;
+  } catch (e) {
+    throw new Error(`fetchJson: invalid JSON (${(e as Error).message})`);
+  }
+}
+// ---- end helpers ----
+
 const snowPiercerShape = JSON.parse(
   fs.readFileSync("./snowPiercer.json", "utf8")
 );
@@ -115,28 +180,30 @@ const decrypt = (content, key) => {
 };
 
 const fetchAmtrakTrainsForCleaning = async () => {
-  const response = await fetch(amtrakTrainsURL + `?${Date.now()}=true`);
-  const data = await response.text();
-
-  console.log("fetch in t");
-
-  const mainContent = data.substring(0, data.length - masterSegment);
-  const encryptedPrivateKey = data.substr(
-    data.length - masterSegment,
-    data.length
-  );
-  const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  const decryptedData = decrypt(mainContent, privateKey);
-
-  console.log("dec in t");
-
-  //console.log(decryptedTrainData);
+  const url = amtrakTrainsURL + `?${Date.now()}=true`;
+  const data = await fetchTextWithRetry(url, {
+    attempts: 5,
+    baseDelayMs: 600,
+    timeoutMs: 9000,
+    tag: "amtrakTrains",
+  });
 
   try {
-    decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
+    const mainContent = data.substring(0, data.length - masterSegment);
+    const encryptedPrivateKey = data.substr(data.length - masterSegment, data.length);
+    const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
+    const decryptedData = decrypt(mainContent, privateKey);
 
-    return JSON.parse(decryptedData).features;
+    const parsed = JSON.parse(decryptedData);
+    const features = parsed?.features ?? [];
+    if (!Array.isArray(features) || features.length === 0) {
+      throw new Error("amtrakTrains: empty features");
+    }
+
+    decryptedTrainData = JSON.stringify(features);
+    return features;
   } catch (e) {
+    console.log("[amtrakTrains] decrypt/parse failed:", (e as Error).message);
     shitsFucked = true;
     return [];
   }
@@ -170,15 +237,23 @@ const fetchAmtrakStationsForCleaning = async () => {
 };
 
 const fetchViaForCleaning = async () => {
+  const url = viaURL + `?${Date.now()}=true`;
   try {
-    const response = await fetch(viaURL + `?${Date.now()}=true`);
-    const data = await response.json();
-
+    const data = await fetchJsonWithRetry<Record<string, RawViaTrain>>(url, {
+      attempts: 5,
+      baseDelayMs: 600,
+      timeoutMs: 8000,
+      tag: "viaAllData",
+    });
+    // basic sanity check: expect object with keys
+    if (!data || typeof data !== "object" || Object.keys(data).length === 0) {
+      throw new Error("viaAllData: empty payload");
+    }
     return data;
   } catch (e) {
-    console.log(e);
-    throw new Error('VIA');
-    return {};
+    console.log("[viaAllData] failed:", (e as Error).message);
+    // Re-throw so updateTrains can mark partial failure but continue with others
+    throw new Error("VIA");
   }
 };
 
@@ -844,12 +919,19 @@ const updateTrains = async () => {
             }
 
             Object.keys(allStations).forEach((stationKey) => {
-              amtrakerCache.setStation(stationKey, allStations[stationKey]);
-            });
+          amtrakerCache.setStation(stationKey, allStations[stationKey]);
+        });
 
-            amtrakerCache.setTrains(trains);
-            console.log("set trains cache");
-          })
+      // Guard: avoid clobbering last-good cache with an empty/invalid pull
+      const trainCount = Object.values(trains).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
+      if (trainCount > 0) {
+       amtrakerCache.setTrains(trains);
+        console.log(`set trains cache (records=${trainCount})`);
+      } else {
+      console.log("skip cache update: no trains in pull (keeping last-good)");
+      shitsFucked = true;
+      }
+        })
           .catch((e) => {
             console.log("Error fetching train data:", e);
             shitsFucked = true;

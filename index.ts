@@ -22,6 +22,7 @@ import { trainNames, viaTrainNames } from "./data/trains";
 import * as stationMetaData from "./data/stations";
 import { amtrakStationCodeReplacements } from './data/sharedStations';
 import cache from "./cache";
+import { robustFetchText, robustFetchJson } from "./utils/robustFetch";
 
 const rawStations = JSON.parse(fs.readFileSync("./rawStations.json", { encoding: "utf8" }));
 
@@ -115,55 +116,65 @@ const decrypt = (content, key) => {
 };
 
 const fetchAmtrakTrainsForCleaning = async () => {
-  const response = await fetch(amtrakTrainsURL + `?${Date.now()}=true`);
-  const data = await response.text();
-
-  console.log("fetch in t");
-
-  const mainContent = data.substring(0, data.length - masterSegment);
-  const encryptedPrivateKey = data.substr(
-    data.length - masterSegment,
-    data.length
-  );
-  const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  const decryptedData = decrypt(mainContent, privateKey);
-
-  console.log("dec in t");
-
-  //console.log(decryptedTrainData);
-
   try {
-    decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
+    const { data } = await robustFetchText(amtrakTrainsURL + `?${Date.now()}=true`);
 
-    return JSON.parse(decryptedData).features;
+    console.log("fetch in t");
+
+    const mainContent = data.substring(0, data.length - masterSegment);
+    const encryptedPrivateKey = data.substr(
+      data.length - masterSegment,
+      data.length
+    );
+    const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
+    const decryptedData = decrypt(mainContent, privateKey);
+
+    console.log("dec in t");
+
+    //console.log(decryptedTrainData);
+
+    try {
+      decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
+
+      return JSON.parse(decryptedData).features;
+    } catch (e) {
+      shitsFucked = true;
+      return [];
+    }
   } catch (e) {
+    console.error("Error in fetchAmtrakTrainsForCleaning:", e);
     shitsFucked = true;
     return [];
   }
 };
 
 const fetchAmtrakStationsForCleaning = async () => {
-  const response = await fetch(amtrakStationsURL + `?${Date.now()}=true`);
-  const data = await response.text();
-
-  const mainContent = data.substring(0, data.length - masterSegment);
-  const encryptedPrivateKey = data.substr(
-    data.length - masterSegment,
-    data.length
-  );
-  const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  const decrypted = decrypt(mainContent, privateKey);
-
   try {
-    decryptedStationData = JSON.stringify(
-      JSON.parse(decrypted)?.StationsDataResponse
-    );
+    const { data } = await robustFetchText(amtrakStationsURL + `?${Date.now()}=true`);
 
-    return decrypted.length > 0
-      ? JSON.parse(decrypted)?.StationsDataResponse?.features
-      : rawStations.features;
+    const mainContent = data.substring(0, data.length - masterSegment);
+    const encryptedPrivateKey = data.substr(
+      data.length - masterSegment,
+      data.length
+    );
+    const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
+    const decrypted = decrypt(mainContent, privateKey);
+
+    try {
+      decryptedStationData = JSON.stringify(
+        JSON.parse(decrypted)?.StationsDataResponse
+      );
+
+      return decrypted.length > 0
+        ? JSON.parse(decrypted)?.StationsDataResponse?.features
+        : rawStations.features;
+    } catch (e) {
+      //console.log("stations e:", e.toString());
+      decryptedStationData = JSON.stringify(rawStations.features);
+      return rawStations.features;
+    }
   } catch (e) {
-    //console.log("stations e:", e.toString());
+    console.error("Error in fetchAmtrakStationsForCleaning:", e);
     decryptedStationData = JSON.stringify(rawStations.features);
     return rawStations.features;
   }
@@ -171,14 +182,11 @@ const fetchAmtrakStationsForCleaning = async () => {
 
 const fetchViaForCleaning = async () => {
   try {
-    const response = await fetch(viaURL + `?${Date.now()}=true`);
-    const data = await response.json();
-
+    const { data } = await robustFetchJson(viaURL + `?${Date.now()}=true`);
     return data;
   } catch (e) {
-    console.log(e);
+    console.error("Error in fetchViaForCleaning:", e);
     throw new Error('VIA');
-    return {};
   }
 };
 
@@ -367,28 +375,27 @@ const updateTrains = async () => {
   shitsFucked = false;
 
   // getting allttmtrains for ASMAD
-  fetch(
+  robustFetchText(
     `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
   )
-    .then((res) => res.text())
-    .then((data) => {
+    .then(({ data }) => {
       AllTTMTrains = data;
     })
     .catch((e) => {
-      console.log("AllTTMTrains fetch error");
+      console.error("AllTTMTrains fetch error:", e);
     });
 
-  const platformRes = await fetch("https://platformsapi.amtraker.com/stations");
   try {
-    trainPlatforms = await platformRes.json();
+    const { data: platformData } = await robustFetchJson("https://platformsapi.amtraker.com/stations");
+    trainPlatforms = platformData;
   } catch (e) {
+    console.error("Error fetching platform data:", e);
     trainPlatforms = {};
   }
 
-  const amtrakAlertsData = await fetch("https://store.transitstat.us/amtrak_alerts").then((res) => res.json());
+  const amtrakAlertsData = await robustFetchJson("https://store.transitstat.us/amtrak_alerts").then(({ data }) => data);
 
-  const brightlineRes = await fetch('https://store.transitstat.us/brightline');
-  const rawBrightline = await brightlineRes.json();
+  const { data: rawBrightline } = await robustFetchJson('https://store.transitstat.us/brightline');
   brightlineData = rawBrightline['v1'];
   brightlinePlatforms = rawBrightline['platforms'];
 

@@ -5,6 +5,7 @@ import moment from "moment-timezone";
 import * as schedule from "node-schedule";
 import * as fs from "fs";
 import { XMLBuilder } from "fast-xml-parser";
+import { robustFetch } from "./robustFetch";
 
 const xmlBuilder = new XMLBuilder();
 
@@ -115,7 +116,7 @@ const decrypt = (content, key) => {
 };
 
 const fetchAmtrakTrainsForCleaning = async () => {
-  const response = await fetch(amtrakTrainsURL + `?${Date.now()}=true`);
+  const response = await robustFetch(amtrakTrainsURL + `?${Date.now()}=true`);
   const data = await response.text();
 
   console.log("fetch in t");
@@ -143,7 +144,7 @@ const fetchAmtrakTrainsForCleaning = async () => {
 };
 
 const fetchAmtrakStationsForCleaning = async () => {
-  const response = await fetch(amtrakStationsURL + `?${Date.now()}=true`);
+  const response = await robustFetch(amtrakStationsURL + `?${Date.now()}=true`);
   const data = await response.text();
 
   const mainContent = data.substring(0, data.length - masterSegment);
@@ -171,7 +172,7 @@ const fetchAmtrakStationsForCleaning = async () => {
 
 const fetchViaForCleaning = async () => {
   try {
-    const response = await fetch(viaURL + `?${Date.now()}=true`);
+    const response = await robustFetch(viaURL + `?${Date.now()}=true`);
     const data = await response.json();
 
     return data;
@@ -367,7 +368,7 @@ const updateTrains = async () => {
   shitsFucked = false;
 
   // getting allttmtrains for ASMAD
-  fetch(
+  robustFetch(
     `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
   )
     .then((res) => res.text())
@@ -375,22 +376,35 @@ const updateTrains = async () => {
       AllTTMTrains = data;
     })
     .catch((e) => {
-      console.log("AllTTMTrains fetch error");
+      console.log("AllTTMTrains fetch error:", e.message || e);
     });
 
-  const platformRes = await fetch("https://platformsapi.amtraker.com/stations");
+  const platformRes = await robustFetch("https://platformsapi.amtraker.com/stations");
   try {
     trainPlatforms = await platformRes.json();
   } catch (e) {
+    console.log("Platform API error:", e.message || e);
     trainPlatforms = {};
   }
 
-  const amtrakAlertsData = await fetch("https://store.transitstat.us/amtrak_alerts").then((res) => res.json());
+  let amtrakAlertsData = {};
+  try {
+    amtrakAlertsData = await robustFetch("https://store.transitstat.us/amtrak_alerts").then((res) => res.json());
+  } catch (e) {
+    console.log("Amtrak alerts fetch error:", e.message || e);
+    amtrakAlertsData = {};
+  }
 
-  const brightlineRes = await fetch('https://store.transitstat.us/brightline');
-  const rawBrightline = await brightlineRes.json();
-  brightlineData = rawBrightline['v1'];
-  brightlinePlatforms = rawBrightline['platforms'];
+  try {
+    const brightlineRes = await robustFetch('https://store.transitstat.us/brightline');
+    const rawBrightline = await brightlineRes.json();
+    brightlineData = rawBrightline['v1'];
+    brightlinePlatforms = rawBrightline['platforms'];
+  } catch (e) {
+    console.log("Brightline fetch error:", e.message || e);
+    brightlineData = {};
+    brightlinePlatforms = {};
+  }
 
   let trains: TrainResponse = {};
   let allStations: StationResponse = {};
@@ -430,7 +444,7 @@ const updateTrains = async () => {
             staleData.avgLastUpdate = 0;
             staleData.stale = false;
 
-            Object.keys(brightlineData['trains']).forEach((trainNum) => {
+            Object.keys(brightlineData['trains'] || {}).forEach((trainNum) => {
               const rawTrainData = brightlineData['trains'][trainNum];
 
               if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
@@ -456,8 +470,8 @@ const updateTrains = async () => {
                       name: prediction.stationName,
                       code: actualID,
                       tz: prediction.tz,
-                      lat: brightlineData['stations'][prediction['stationID']]['lat'],
-                      lon: brightlineData['stations'][prediction['stationID']]['lon'],
+                      lat: brightlineData['stations'] && brightlineData['stations'][prediction['stationID']] ? brightlineData['stations'][prediction['stationID']]['lat'] : 0,
+                      lon: brightlineData['stations'] && brightlineData['stations'][prediction['stationID']] ? brightlineData['stations'][prediction['stationID']]['lon'] : 0,
                       hasAddress: false,
                       address1: "",
                       address2: "",
@@ -796,7 +810,7 @@ const updateTrains = async () => {
                 provider: "Amtrak",
                 providerShort: "AMTK",
                 onlyOfTrainNum: true,
-                alerts: amtrakAlertsData['trains'][`${+rawTrainData.TrainNum}-${originDateOfMonth}`] ?? [],
+                alerts: amtrakAlertsData['trains'] ? amtrakAlertsData['trains'][`${+rawTrainData.TrainNum}-${originDateOfMonth}`] ?? [] : [],
               };
 
               const calculatedColors = calculateIconColor(train, allStations);

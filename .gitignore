@@ -48,6 +48,11 @@ web_modules/
 # TypeScript cache
 *.tsbuildinfo
 
+# Compiled JavaScript files (except specific ones)
+*.js
+!station_tz.js
+!via_station_extract.js
+
 # Optional npm cache directory
 .npm
 

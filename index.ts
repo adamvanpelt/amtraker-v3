@@ -59,6 +59,7 @@ let staleData = {
 };
 
 let shitsFucked = false;
+let isUpdatingTrains = false; // Mutex to prevent overlapping updates
 
 const amtrakTrainsURL =
   "https://maps.amtrak.com/services/MapDataService/trains/getTrainsData";
@@ -100,6 +101,53 @@ const ccDegToCardinal = (deg) => {
   return "N";
 };
 
+// Robust fetch utility with timeout, retries, and exponential backoff
+const fetchWithRetry = async (url: string, options: RequestInit = {}, maxRetries = 3, timeout = 30000): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+  
+  const fetchOptions: RequestInit = {
+    ...options,
+    signal: controller.signal,
+    headers: {
+      'User-Agent': 'Amtraker/3.0 (contact@amtraker.com)',
+      ...options.headers,
+    },
+  };
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, fetchOptions);
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      return response;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Exponential backoff with jitter
+      const delay = Math.min(1000 * Math.pow(2, attempt), 10000) + Math.random() * 1000;
+      console.log(`Fetch attempt ${attempt + 1} failed for ${url}, retrying in ${Math.round(delay)}ms:`, error.message);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      
+      // Reset timeout for next attempt
+      const newController = new AbortController();
+      const newTimeoutId = setTimeout(() => newController.abort(), timeout);
+      fetchOptions.signal = newController.signal;
+    }
+  }
+  
+  throw new Error(`Failed to fetch ${url} after ${maxRetries + 1} attempts`);
+};
+
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
     crypto.lib.CipherParams.create({
@@ -115,46 +163,58 @@ const decrypt = (content, key) => {
 };
 
 const fetchAmtrakTrainsForCleaning = async () => {
-  const response = await fetch(amtrakTrainsURL + `?${Date.now()}=true`);
-  const data = await response.text();
-
-  console.log("fetch in t");
-
-  const mainContent = data.substring(0, data.length - masterSegment);
-  const encryptedPrivateKey = data.substr(
-    data.length - masterSegment,
-    data.length
-  );
-  const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  const decryptedData = decrypt(mainContent, privateKey);
-
-  console.log("dec in t");
-
-  //console.log(decryptedTrainData);
-
   try {
-    decryptedTrainData = JSON.stringify(JSON.parse(decryptedData).features);
+    const response = await fetchWithRetry(amtrakTrainsURL + `?${Date.now()}=true`);
+    const data = await response.text();
 
-    return JSON.parse(decryptedData).features;
+    console.log("fetch in t");
+
+    const mainContent = data.substring(0, data.length - masterSegment);
+    const encryptedPrivateKey = data.substr(
+      data.length - masterSegment,
+      data.length
+    );
+    const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
+    const decryptedData = decrypt(mainContent, privateKey);
+
+    console.log("dec in t");
+
+    const parsedData = JSON.parse(decryptedData);
+    decryptedTrainData = JSON.stringify(parsedData.features);
+
+    return parsedData.features;
   } catch (e) {
+    console.log("Amtrak trains fetch/decrypt failed, falling back to last known data:", e.message);
+    
+    // Try to use last known good data instead of setting shitsFucked
+    if (decryptedTrainData) {
+      try {
+        console.log("Using last known train data");
+        return JSON.parse(decryptedTrainData);
+      } catch (parseError) {
+        console.log("Last known train data is invalid, returning empty array");
+      }
+    }
+    
+    // Only set shitsFucked if we have no fallback data
     shitsFucked = true;
     return [];
   }
 };
 
 const fetchAmtrakStationsForCleaning = async () => {
-  const response = await fetch(amtrakStationsURL + `?${Date.now()}=true`);
-  const data = await response.text();
-
-  const mainContent = data.substring(0, data.length - masterSegment);
-  const encryptedPrivateKey = data.substr(
-    data.length - masterSegment,
-    data.length
-  );
-  const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  const decrypted = decrypt(mainContent, privateKey);
-
   try {
+    const response = await fetchWithRetry(amtrakStationsURL + `?${Date.now()}=true`);
+    const data = await response.text();
+
+    const mainContent = data.substring(0, data.length - masterSegment);
+    const encryptedPrivateKey = data.substr(
+      data.length - masterSegment,
+      data.length
+    );
+    const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
+    const decrypted = decrypt(mainContent, privateKey);
+
     decryptedStationData = JSON.stringify(
       JSON.parse(decrypted)?.StationsDataResponse
     );
@@ -163,7 +223,7 @@ const fetchAmtrakStationsForCleaning = async () => {
       ? JSON.parse(decrypted)?.StationsDataResponse?.features
       : rawStations.features;
   } catch (e) {
-    //console.log("stations e:", e.toString());
+    console.log("Amtrak stations fetch/decrypt failed, falling back to rawStations:", e.message);
     decryptedStationData = JSON.stringify(rawStations.features);
     return rawStations.features;
   }
@@ -171,14 +231,13 @@ const fetchAmtrakStationsForCleaning = async () => {
 
 const fetchViaForCleaning = async () => {
   try {
-    const response = await fetch(viaURL + `?${Date.now()}=true`);
+    const response = await fetchWithRetry(viaURL + `?${Date.now()}=true`);
     const data = await response.json();
 
     return data;
   } catch (e) {
-    console.log(e);
-    throw new Error('VIA');
-    return {};
+    console.log("VIA fetch failed, continuing without VIA data:", e.message);
+    return {}; // Never throw, return empty object to allow Amtrak updates to continue
   }
 };
 
@@ -363,503 +422,541 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
 };
 
 const updateTrains = async () => {
+  // Prevent overlapping executions
+  if (isUpdatingTrains) {
+    console.log("Update already in progress, skipping...");
+    return;
+  }
+  
+  isUpdatingTrains = true;
   console.log("Updating trains...");
   shitsFucked = false;
 
-  // getting allttmtrains for ASMAD
-  fetch(
-    `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
-  )
-    .then((res) => res.text())
-    .then((data) => {
-      AllTTMTrains = data;
-    })
-    .catch((e) => {
-      console.log("AllTTMTrains fetch error");
+  try {
+    // getting allttmtrains for ASMAD with improved error handling
+    try {
+      const allTTMResponse = await fetchWithRetry(
+        `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
+      );
+      AllTTMTrains = await allTTMResponse.text();
+    } catch (e) {
+      console.log("AllTTMTrains fetch error:", e.message);
+    }
+
+    // Platforms with improved error handling
+    try {
+      const platformRes = await fetchWithRetry("https://platformsapi.amtraker.com/stations");
+      trainPlatforms = await platformRes.json();
+    } catch (e) {
+      console.log("Platforms fetch error:", e.message);
+      trainPlatforms = {};
+    }
+
+    // Amtrak alerts with improved error handling
+    let amtrakAlertsData = { trains: {} };
+    try {
+      const alertsRes = await fetchWithRetry("https://store.transitstat.us/amtrak_alerts");
+      amtrakAlertsData = await alertsRes.json();
+    } catch (e) {
+      console.log("Amtrak alerts fetch error:", e.message);
+    }
+
+    // Brightline with improved error handling
+    try {
+      const brightlineRes = await fetchWithRetry('https://store.transitstat.us/brightline');
+      const rawBrightline = await brightlineRes.json();
+      brightlineData = rawBrightline['v1'] || {};
+      brightlinePlatforms = rawBrightline['platforms'] || {};
+    } catch (e) {
+      console.log("Brightline fetch error:", e.message);
+      brightlineData = {};
+      brightlinePlatforms = {};
+    }
+
+    let trains: TrainResponse = {};
+    let allStations: StationResponse = {};
+
+    // Fetch VIA data (fault-tolerant, never throws)
+    const viaData = await fetchViaForCleaning();
+    
+    // Fetch Amtrak stations data (with fallback to rawStations)
+    const stationData = await fetchAmtrakStationsForCleaning();
+    console.log("fetched s");
+    
+    stationData.forEach((station) => {
+      const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
+
+      const stationObj = {
+        name: stationMetaData.stationNames[station.properties.Code],
+        code: actualCode,
+        tz: stationMetaData.timeZones[station.properties.Code],
+        lat: station.properties.lat,
+        lon: station.properties.lon,
+        hasAddress: true,
+        address1: station.properties.Address1,
+        address2: station.properties.Address2,
+        city: station.properties.City,
+        state: station.properties.State,
+        zip: station.properties.Zipcode,
+        trains: [],
+      };
+
+      if (!allStations[actualCode]) allStations[actualCode] = stationObj;
+      amtrakerCache.setStation(actualCode, stationObj);
     });
 
-  const platformRes = await fetch("https://platformsapi.amtraker.com/stations");
-  try {
-    trainPlatforms = await platformRes.json();
-  } catch (e) {
-    trainPlatforms = {};
-  }
+    // Fetch Amtrak trains data (with fallback to last known data)
+    const amtrakData = await fetchAmtrakTrainsForCleaning();
+    console.log("fetched t");
+    
+    const nowCleaning: number = new Date().valueOf();
 
-  const amtrakAlertsData = await fetch("https://store.transitstat.us/amtrak_alerts").then((res) => res.json());
+    staleData.activeTrains = 0;
+    staleData.avgLastUpdate = 0;
+    staleData.stale = false;
 
-  const brightlineRes = await fetch('https://store.transitstat.us/brightline');
-  const rawBrightline = await brightlineRes.json();
-  brightlineData = rawBrightline['v1'];
-  brightlinePlatforms = rawBrightline['platforms'];
+    // Process Brightline trains with error protection
+    try {
+      if (brightlineData && brightlineData['trains']) {
+        Object.keys(brightlineData['trains']).forEach((trainNum) => {
+          const rawTrainData = brightlineData['trains'][trainNum];
 
-  let trains: TrainResponse = {};
-  let allStations: StationResponse = {};
+          if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
 
-  fetchViaForCleaning()
-    .then((viaData) => {
-      fetchAmtrakStationsForCleaning().then((stationData) => {
-        console.log("fetched s");
-        stationData.forEach((station) => {
-          const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
-
-          const stationObj = {
-            name: stationMetaData.stationNames[station.properties.Code],
-            code: actualCode,
-            tz: stationMetaData.timeZones[station.properties.Code],
-            lat: station.properties.lat,
-            lon: station.properties.lon,
-            hasAddress: true,
-            address1: station.properties.Address1,
-            address2: station.properties.Address2,
-            city: station.properties.City,
-            state: station.properties.State,
-            zip: station.properties.Zipcode,
-            trains: [],
-          };
-
-          if (!allStations[actualCode]) allStations[actualCode] = stationObj;
-          amtrakerCache.setStation(actualCode, stationObj);
-        });
-
-        fetchAmtrakTrainsForCleaning()
-          .then((amtrakData) => {
-            console.log("fetched t");
-            const nowCleaning: number = new Date().valueOf();
-
-            staleData.activeTrains = 0;
-            staleData.avgLastUpdate = 0;
-            staleData.stale = false;
-
-            Object.keys(brightlineData['trains']).forEach((trainNum) => {
-              const rawTrainData = brightlineData['trains'][trainNum];
-
-              if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
-
-              const firstStation = rawTrainData['predictions'][0];
-              const lastStation = rawTrainData['predictions'].slice(-1)[0];
+          const firstStation = rawTrainData['predictions'][0];
+          const lastStation = rawTrainData['predictions'].slice(-1)[0];
               const trainEventStation = rawTrainData['predictions'].filter((station) => station.dep >= Date.now())[0] ?? lastStation;
 
-              let train: Train = {
+          let train: Train = {
                 routeName: 'Brightline',
-                trainNum: 'b' + trainNum,
-                trainNumRaw: trainNum,
-                trainID: 'b' + trainNum + '-' + new Date(firstStation.dep).getDate(),
-                lat: rawTrainData['lat'],
-                lon: rawTrainData['lon'],
-                trainTimely: "",
-                iconColor: "#212529",
-                textColor: "#ffffff",
-                stations: rawTrainData.predictions.map((prediction) => {
-                  const actualID = 'B' + prediction.stationID;
-                  if (!allStations[actualID]) {
-                    allStations[actualID] = {
-                      name: prediction.stationName,
-                      code: actualID,
-                      tz: prediction.tz,
-                      lat: brightlineData['stations'][prediction['stationID']]['lat'],
-                      lon: brightlineData['stations'][prediction['stationID']]['lon'],
-                      hasAddress: false,
-                      address1: "",
-                      address2: "",
-                      city: "",
-                      state: "",
-                      zip: 0,
-                      trains: [],
-                    }
-                  }
-
-                  allStations[actualID].trains.push(
-                    'b' + trainNum + '-' + new Date(firstStation.dep).getDate()
-                  );
-
-                  return {
-                    name: prediction['stationName'],
-                    code: actualID,
-                    tz: prediction['tz'],
-                    bus: false,
-                    schArr: new Date(prediction['arr'] - prediction['arrDelay']).toISOString(),
-                    schDep: new Date(prediction['dep'] - prediction['depDelay']).toISOString(),
-                    arr: new Date(prediction['arr']).toISOString(),
-                    dep: new Date(prediction['dep']).toISOString(),
-                    arrCmnt: "",
-                    depCmnt: "",
-                    status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
-                    stopIconColor: "#212529",
-                    platform: brightlinePlatforms[prediction.stationID] && brightlinePlatforms[prediction.stationID][trainNum] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
-                  };
-                }),
-                heading: ccDegToCardinal(rawTrainData.heading),
-                eventCode: 'B' + trainEventStation.stationID,
-                eventTZ: trainEventStation.tz,
-                eventName: trainEventStation.stationName,
-                origCode: 'B' + firstStation.stationID,
-                originTZ: firstStation.tz,
-                origName: firstStation.stationName,
-                destCode: 'B' + lastStation.stationID,
-                destTZ: lastStation.tz,
-                destName: lastStation.stationName,
-                trainState: "Active",
-                velocity: 0, // no data unfortunately
-                statusMsg: " ",
-                createdAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
-                updatedAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
-                lastValTS: brightlineData['lastUpdated'] ?? new Date().toISOString(),
-                objectID: Number(trainNum),
-                provider: "Brightline",
-                providerShort: "BLNE",
-                onlyOfTrainNum: true,
-                alerts: [],
-              };
-
-              const calculatedColors = calculateIconColor(train, allStations);
-              train.iconColor = calculatedColors['color'];
-              train.textColor = calculatedColors['text'];
-              train.stations = train.stations.map((stationRaw) => {
-                return {
-                  ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
+            trainNum: 'b' + trainNum,
+            trainNumRaw: trainNum,
+            trainID: 'b' + trainNum + '-' + new Date(firstStation.dep).getDate(),
+            lat: rawTrainData['lat'],
+            lon: rawTrainData['lon'],
+            trainTimely: "",
+            iconColor: "#212529",
+            textColor: "#ffffff",
+            stations: rawTrainData.predictions.map((prediction) => {
+              const actualID = 'B' + prediction.stationID;
+              if (!allStations[actualID]) {
+                allStations[actualID] = {
+                  name: prediction.stationName,
+                  code: actualID,
+                  tz: prediction.tz,
+                  lat: brightlineData['stations'][prediction['stationID']]['lat'],
+                  lon: brightlineData['stations'][prediction['stationID']]['lon'],
+                  hasAddress: false,
+                  address1: "",
+                  address2: "",
+                  city: "",
+                  state: "",
+                  zip: 0,
+                  trains: [],
                 }
-              });
-
-              if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
-              trains['b' + trainNum].push(train);
-
-              if (train.trainState === "Active") {
-                staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.lastValTS).valueOf();
-                staleData.activeTrains++;
               }
-            })
 
-            Object.keys(viaData).forEach((trainNum) => {
-              const rawTrainData = viaData[trainNum];
-              const actualTrainNum = "v" + trainNum.split(" ")[0];
-              if (!rawTrainData.departed) return; //train doesn't exist
-              if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
-
-              const sortedStations = rawTrainData.times.sort(
-                (a, b) =>
-                  new Date(a.scheduled).valueOf() -
-                  new Date(b.scheduled).valueOf()
+              allStations[actualID].trains.push(
+                'b' + trainNum + '-' + new Date(firstStation.dep).getDate()
               );
 
-              const firstStation = sortedStations[0];
-              const lastStation = sortedStations[sortedStations.length - 1];
-              const trainEventStation =
-                sortedStations.find((station) => station.eta !== "ARR") ??
-                firstStation;
-
-              let trainDelay = 0;
-
-              let train: Train = {
-                routeName:
-                  viaTrainNames[trainNum.split(" ")[0]] ??
-                  `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
-                trainNum: `${actualTrainNum}`,
-                trainNumRaw: trainNum.split(" ")[0],
-                trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]
-                  }`,
-                lat:
-                  rawTrainData.lat ??
-                  stationMetaData.viaCoords[trainEventStation.code][0],
-                lon:
-                  rawTrainData.lng ??
-                  stationMetaData.viaCoords[trainEventStation.code][1],
-                trainTimely: "",
-                iconColor: '#212529',
-                textColor: '#ffffff',
-                stations: sortedStations.map((station) => {
-                  if (!allStations[station.code]) {
-                    allStations[station.code] = {
-                      name: stationMetaData.viaStationNames[station.code],
-                      code: station.code,
-                      tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
-                      lat: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][0] : 0,
-                      lon: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][1] : 0,
-                      hasAddress: false,
-                      address1: "",
-                      address2: "",
-                      city: "",
-                      state: "",
-                      zip: 0,
-                      trains: [],
-                    };
-                  }
-
-                  allStations[station.code].trains.push(
-                    `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
-                  );
-
-                  if (station.arrival && station.arrival.estimated) {
-                    trainDelay =
-                      new Date(station.arrival.estimated).valueOf() -
-                      new Date(station.arrival.scheduled).valueOf();
-                  }
-
-                  const estArr = (station.arrival ?? station.departure)
-                    .estimated;
-                  const estDep = (station.departure ?? station.arrival)
-                    .estimated;
-
-                  return {
-                    name: stationMetaData.viaStationNames[station.code],
-                    code: station.code,
-                    tz: stationMetaData.viatimeZones[station.code],
-                    bus: false,
-                    schArr: (station.arrival ?? station.departure).scheduled,
-                    schDep: (station.departure ?? station.arrival).scheduled,
-                    arr:
-                      estArr ??
-                      new Date(
-                        new Date(
-                          (station.arrival ?? station.departure).scheduled
-                        ).valueOf() + trainDelay
-                      ),
-                    dep:
-                      estDep ??
-                      new Date(
-                        new Date(
-                          (station.departure ?? station.arrival).scheduled
-                        ).valueOf() + trainDelay
-                      ),
-                    arrCmnt: "",
-                    depCmnt: "",
-                    status: station.eta === "ARR" ? "Departed" : "Enroute",
-                    stopIconColor: "#212529",
-                    platform: "",
-                  };
-                }),
-                heading: ccDegToCardinal(rawTrainData.direction),
-                eventCode: trainEventStation.code,
-                eventTZ: stationMetaData.viatimeZones[trainEventStation.code],
-                eventName: trainEventStation.code,
-                origCode: firstStation.code,
-                originTZ: stationMetaData.viatimeZones[firstStation.code],
-                origName: stationMetaData.viaStationNames[firstStation.code],
-                destCode: lastStation.code,
-                destTZ: stationMetaData.viatimeZones[lastStation.code],
-                destName: stationMetaData.viaStationNames[lastStation.code],
-                trainState: "Active",
-                velocity: (rawTrainData.speed ?? 0) * 0.621371, // i love metric lol
-                statusMsg: " ",
-                createdAt: rawTrainData.poll ?? new Date().toISOString(),
-                updatedAt: rawTrainData.poll ?? new Date().toISOString(),
-                lastValTS: rawTrainData.poll ?? new Date().toISOString(),
-                objectID: rawTrainData.OBJECTID,
-                provider: "Via",
-                providerShort: "VIA",
-                onlyOfTrainNum: true,
-                alerts: [],
+              return {
+                name: prediction['stationName'],
+                code: actualID,
+                tz: prediction['tz'],
+                bus: false,
+                schArr: new Date(prediction['arr'] - prediction['arrDelay']).toISOString(),
+                schDep: new Date(prediction['dep'] - prediction['depDelay']).toISOString(),
+                arr: new Date(prediction['arr']).toISOString(),
+                dep: new Date(prediction['dep']).toISOString(),
+                arrCmnt: "",
+                depCmnt: "",
+                status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
+                stopIconColor: "#212529",
+                platform: brightlinePlatforms[prediction.stationID] && brightlinePlatforms[prediction.stationID][trainNum] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
               };
+            }),
+            heading: ccDegToCardinal(rawTrainData.heading),
+            eventCode: 'B' + trainEventStation.stationID,
+            eventTZ: trainEventStation.tz,
+            eventName: trainEventStation.stationName,
+            origCode: 'B' + firstStation.stationID,
+            originTZ: firstStation.tz,
+            origName: firstStation.stationName,
+            destCode: 'B' + lastStation.stationID,
+            destTZ: lastStation.tz,
+            destName: lastStation.stationName,
+            trainState: "Active",
+            velocity: 0, // no data unfortunately
+            statusMsg: " ",
+            createdAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+            updatedAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+            lastValTS: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+            objectID: Number(trainNum),
+            provider: "Brightline",
+            providerShort: "BLNE",
+            onlyOfTrainNum: true,
+            alerts: [],
+          };
 
-              const calculatedColors = calculateIconColor(train, allStations);
-              train.iconColor = calculatedColors['color'];
-              train.textColor = calculatedColors['text'];
-              train.stations = train.stations.map((stationRaw) => {
-                return {
-                  ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
-                }
-              });
+          const calculatedColors = calculateIconColor(train, allStations);
+          train.iconColor = calculatedColors['color'];
+          train.textColor = calculatedColors['text'];
+          train.stations = train.stations.map((stationRaw) => {
+            return {
+              ...stationRaw,
+              stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
+            }
+          });
 
-              if (!trains[actualTrainNum]) trains[actualTrainNum] = [];
-              trains[actualTrainNum].push(train);
+          if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
+          trains['b' + trainNum].push(train);
 
-              if (train.trainState === "Active") {
-                staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.lastValTS).valueOf();
-                staleData.activeTrains++;
-              }
-            });
+          if (train.trainState === "Active") {
+            staleData.avgLastUpdate +=
+              nowCleaning - new Date(train.lastValTS).valueOf();
+            staleData.activeTrains++;
+          }
+        });
+      }
+    } catch (e) {
+      console.log("Error processing Brightline data:", e.message);
+    }
 
-            amtrakData.forEach((property) => {
-              let rawTrainData = property.properties;
+    // Process VIA trains with error protection
+    try {
+      Object.keys(viaData).forEach((trainNum) => {
+        const rawTrainData = viaData[trainNum];
+        const actualTrainNum = "v" + trainNum.split(" ")[0];
+        if (!rawTrainData.departed) return; //train doesn't exist
+        if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
 
-              let rawStations: Array<RawStation> = [];
+        const sortedStations = rawTrainData.times.sort(
+          (a, b) =>
+            new Date(a.scheduled).valueOf() -
+            new Date(b.scheduled).valueOf()
+        );
 
-              for (let i = 1; i < 47; i++) {
-                let station = rawTrainData[`Station${i}`];
-                if (station == undefined || !station) {
-                  continue;
-                } else {
-                  try {
-                    let rawStation = JSON.parse(station);
-                    if (rawStation.code === "CBN") continue;
-                    rawStations.push(rawStation);
-                  } catch (e) {
-                    console.log("Error parsing station:", e);
-                    continue;
-                  }
-                }
-              }
+        const firstStation = sortedStations[0];
+        const lastStation = sortedStations[sortedStations.length - 1];
+        const trainEventStation =
+          sortedStations.find((station) => station.eta !== "ARR") ??
+          firstStation;
 
-              let stations = rawStations.map((station) => {
-                const actualCode = amtrakStationCodeReplacements[station.code] ?? station.code;
+        let trainDelay = 0;
 
-                if (!allStations[actualCode]) {
-                  if (!amtrakerCache.stationExists(actualCode)) {
-                    amtrakerCache.setStation(actualCode, {
-                      name: stationMetaData.stationNames[station.code],
-                      code: actualCode,
-                      tz: stationMetaData.timeZones[station.code],
-                      lat: 0,
-                      lon: 0,
-                      hasAddress: false,
-                      address1: "",
-                      address2: "",
-                      city: "",
-                      state: "",
-                      zip: 0,
-                      trains: [],
-                    });
-                  }
-                }
-
-                const result = parseRawStation(station, rawTrainData.TrainNum); //, rawTrainData.TrainNum == "784");
-
-                return result;
-              });
-
-              if (stations.length === 0) {
-                console.log(
-                  "No stations found for train:",
-                  rawTrainData.TrainNum
-                );
-                return;
-              }
-
-              const enrouteStations = stations.filter(
-                (station) =>
-                  (station.status === "Enroute" ||
-                    station.status === "Station") &&
-                  (station.arr || station.dep)
-              );
-
-              const trainEventCode = enrouteStations.length == 0 ? stations[stations.length - 1].code : enrouteStations[0].code;
-              const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode] ?? trainEventCode;
-              const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
-              const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;
-
-              // i hate this more than you do
-              const originDateOfMonth = new Intl.DateTimeFormat('en-US',
-                {
-                  timeZone: stationMetaData.timeZones[rawTrainData.OrigCode],
-                  day: 'numeric'
-                })
-                .format(new Date(
-                  stations[0].schDep));
-
-              let train: Train = {
-                routeName: trainNames[+rawTrainData.TrainNum]
-                  ? trainNames[+rawTrainData.TrainNum]
-                  : rawTrainData.RouteName,
-                trainNum: `${+rawTrainData.TrainNum}`,
-                trainNumRaw: `${+rawTrainData.TrainNum}`,
-                trainID: `${+rawTrainData.TrainNum}-${originDateOfMonth}`,
-                lat: property.geometry.coordinates[1],
-                lon: property.geometry.coordinates[0],
-                trainTimely: "",
-                iconColor: "#212529",
-                textColor: "#ffffff",
-                stations: stations,
-                heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
-                eventCode: actualTrainEventCode,
-                eventTZ: stationMetaData.timeZones[trainEventCode],
-                eventName: stationMetaData.stationNames[trainEventCode],
-                origCode: actualOrigCode,
-                originTZ: stationMetaData.timeZones[rawTrainData.OrigCode],
-                origName: stationMetaData.stationNames[rawTrainData.OrigCode],
-                destCode: actualDestCode,
-                destTZ: stationMetaData.timeZones[rawTrainData.DestCode],
-                destName: stationMetaData.stationNames[rawTrainData.DestCode],
-                trainState: rawTrainData.TrainState,
-                velocity: +rawTrainData.Velocity,
-                statusMsg:
-                  stations.filter(
-                    (station) =>
-                      !station.arr &&
-                      !station.dep &&
-                      station.code === trainEventCode
-                  ).length > 0
-                    ? "SERVICE DISRUPTION"
-                    : rawTrainData.StatusMsg,
-                createdAt:
-                  parseDate(rawTrainData.created_at, "America/New_York") ??
-                  parseDate(rawTrainData.updated_at, "America/New_York"),
-                updatedAt:
-                  parseDate(rawTrainData.updated_at, "America/New_York") ??
-                  parseDate(rawTrainData.created_at, "America/New_York"),
-                lastValTS:
-                  parseDate(rawTrainData.LastValTS, trainEventCode) ??
-                  stations[0].schDep,
-                objectID: rawTrainData.OBJECTID,
-                provider: "Amtrak",
-                providerShort: "AMTK",
-                onlyOfTrainNum: true,
-                alerts: amtrakAlertsData['trains'][`${+rawTrainData.TrainNum}-${originDateOfMonth}`] ?? [],
+        let train: Train = {
+          routeName:
+            viaTrainNames[trainNum.split(" ")[0]] ??
+            `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
+          trainNum: `${actualTrainNum}`,
+          trainNumRaw: trainNum.split(" ")[0],
+          trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`,
+          lat:
+            rawTrainData.lat ??
+            stationMetaData.viaCoords[trainEventStation.code][0],
+          lon:
+            rawTrainData.lng ??
+            stationMetaData.viaCoords[trainEventStation.code][1],
+          trainTimely: "",
+          iconColor: '#212529',
+          textColor: '#ffffff',
+          stations: sortedStations.map((station) => {
+            if (!allStations[station.code]) {
+              allStations[station.code] = {
+                name: stationMetaData.viaStationNames[station.code],
+                code: station.code,
+                tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
+                lat: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][0] : 0,
+                lon: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][1] : 0,
+                hasAddress: false,
+                address1: "",
+                address2: "",
+                city: "",
+                state: "",
+                zip: 0,
+                trains: [],
               };
-
-              const calculatedColors = calculateIconColor(train, allStations);
-              train.iconColor = calculatedColors['color'];
-              train.textColor = calculatedColors['text'];
-              train.stations = train.stations.map((stationRaw) => {
-                return {
-                  ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
-                }
-              });
-
-              if (!trains[rawTrainData.TrainNum]) trains[rawTrainData.TrainNum] = [];
-              trains[rawTrainData.TrainNum].push(train);
-
-              if (train.trainState === "Active") {
-                staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.lastValTS).valueOf();
-                staleData.activeTrains++;
-              }
-            });
-
-            // setting onlyOfTrainNum and deduplicating at the same time
-            Object.keys(trains).forEach((trainNum) => {
-              // deduplicating trains with the same ID
-              let trainIDs = [];
-              trains[trainNum] = trains[trainNum].filter((train) => {
-                if (trainIDs.includes(train.trainID)) return false;
-                trainIDs.push(train.trainID);
-                return true;
-              });
-
-              // setting onlyOfTrainNum 
-              trains[trainNum].forEach((train, i, arr) => {
-                trains[trainNum][i].onlyOfTrainNum = arr.length <= 1; // this should be an == but edge cases be damned
-              });
-            })
-
-            staleData.avgLastUpdate =
-              staleData.avgLastUpdate / staleData.activeTrains;
-
-            if (staleData.avgLastUpdate > 1000 * 60 * 20) {
-              console.log("Data is stale, setting...");
-              staleData.stale = true;
             }
 
-            Object.keys(allStations).forEach((stationKey) => {
-              amtrakerCache.setStation(stationKey, allStations[stationKey]);
-            });
+            allStations[station.code].trains.push(
+              `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
+            );
 
-            amtrakerCache.setTrains(trains);
-            console.log("set trains cache");
+            if (station.arrival && station.arrival.estimated) {
+              trainDelay =
+                new Date(station.arrival.estimated).valueOf() -
+                new Date(station.arrival.scheduled).valueOf();
+            }
+
+            const estArr = (station.arrival ?? station.departure)
+              .estimated;
+            const estDep = (station.departure ?? station.arrival)
+              .estimated;
+
+            return {
+              name: stationMetaData.viaStationNames[station.code],
+              code: station.code,
+              tz: stationMetaData.viatimeZones[station.code],
+              bus: false,
+              schArr: (station.arrival ?? station.departure).scheduled,
+              schDep: (station.departure ?? station.arrival).scheduled,
+              arr:
+                estArr ??
+                new Date(
+                  new Date(
+                    (station.arrival ?? station.departure).scheduled
+                  ).valueOf() + trainDelay
+                ),
+              dep:
+                estDep ??
+                new Date(
+                  new Date(
+                    (station.departure ?? station.arrival).scheduled
+                  ).valueOf() + trainDelay
+                ),
+              arrCmnt: "",
+              depCmnt: "",
+              status: station.eta === "ARR" ? "Departed" : "Enroute",
+              stopIconColor: "#212529",
+              platform: "",
+            };
+          }),
+          heading: ccDegToCardinal(rawTrainData.direction),
+          eventCode: trainEventStation.code,
+          eventTZ: stationMetaData.viatimeZones[trainEventStation.code],
+          eventName: trainEventStation.code,
+          origCode: firstStation.code,
+          originTZ: stationMetaData.viatimeZones[firstStation.code],
+          origName: stationMetaData.viaStationNames[firstStation.code],
+          destCode: lastStation.code,
+          destTZ: stationMetaData.viatimeZones[lastStation.code],
+          destName: stationMetaData.viaStationNames[lastStation.code],
+          trainState: "Active",
+          velocity: (rawTrainData.speed ?? 0) * 0.621371, // i love metric lol
+          statusMsg: " ",
+          createdAt: rawTrainData.poll ?? new Date().toISOString(),
+          updatedAt: rawTrainData.poll ?? new Date().toISOString(),
+          lastValTS: rawTrainData.poll ?? new Date().toISOString(),
+          objectID: rawTrainData.OBJECTID,
+          provider: "Via",
+          providerShort: "VIA",
+          onlyOfTrainNum: true,
+          alerts: [],
+        };
+
+        const calculatedColors = calculateIconColor(train, allStations);
+        train.iconColor = calculatedColors['color'];
+        train.textColor = calculatedColors['text'];
+        train.stations = train.stations.map((stationRaw) => {
+          return {
+            ...stationRaw,
+            stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
+          }
+        });
+
+        if (!trains[actualTrainNum]) trains[actualTrainNum] = [];
+        trains[actualTrainNum].push(train);
+
+        if (train.trainState === "Active") {
+          staleData.avgLastUpdate +=
+            nowCleaning - new Date(train.lastValTS).valueOf();
+          staleData.activeTrains++;
+        }
+      });
+    } catch (e) {
+      console.log("Error processing VIA data:", e.message);
+    }
+
+    // Process Amtrak trains with error protection
+    try {
+      amtrakData.forEach((property) => {
+        let rawTrainData = property.properties;
+
+        let rawStations: Array<RawStation> = [];
+
+        for (let i = 1; i < 47; i++) {
+          let station = rawTrainData[`Station${i}`];
+          if (station == undefined || !station) {
+            continue;
+          } else {
+            try {
+              let rawStation = JSON.parse(station);
+              if (rawStation.code === "CBN") continue;
+              rawStations.push(rawStation);
+            } catch (e) {
+              console.log("Error parsing station:", e);
+              continue;
+            }
+          }
+        }
+
+        let stations = rawStations.map((station) => {
+          const actualCode = amtrakStationCodeReplacements[station.code] ?? station.code;
+
+          if (!allStations[actualCode]) {
+            if (!amtrakerCache.stationExists(actualCode)) {
+              amtrakerCache.setStation(actualCode, {
+                name: stationMetaData.stationNames[station.code],
+                code: actualCode,
+                tz: stationMetaData.timeZones[station.code],
+                lat: 0,
+                lon: 0,
+                hasAddress: false,
+                address1: "",
+                address2: "",
+                city: "",
+                state: "",
+                zip: 0,
+                trains: [],
+              });
+            }
+          }
+
+          const result = parseRawStation(station, rawTrainData.TrainNum); //, rawTrainData.TrainNum == "784");
+
+          return result;
+        });
+
+        if (stations.length === 0) {
+          console.log(
+            "No stations found for train:",
+            rawTrainData.TrainNum
+          );
+          return;
+        }
+
+        const enrouteStations = stations.filter(
+          (station) =>
+            (station.status === "Enroute" ||
+              station.status === "Station") &&
+            (station.arr || station.dep)
+        );
+
+        const trainEventCode = enrouteStations.length == 0 ? stations[stations.length - 1].code : enrouteStations[0].code;
+        const actualTrainEventCode = amtrakStationCodeReplacements[trainEventCode] ?? trainEventCode;
+        const actualOrigCode = amtrakStationCodeReplacements[rawTrainData.OrigCode] ?? rawTrainData.OrigCode;
+        const actualDestCode = amtrakStationCodeReplacements[rawTrainData.DestCode] ?? rawTrainData.DestCode;
+
+        // i hate this more than you do
+        const originDateOfMonth = new Intl.DateTimeFormat('en-US',
+          {
+            timeZone: stationMetaData.timeZones[rawTrainData.OrigCode],
+            day: 'numeric'
           })
-          .catch((e) => {
-            console.log("Error fetching train data:", e);
-            shitsFucked = true;
-          });
+          .format(new Date(
+            stations[0].schDep));
+
+        let train: Train = {
+          routeName: trainNames[+rawTrainData.TrainNum]
+            ? trainNames[+rawTrainData.TrainNum]
+            : rawTrainData.RouteName,
+          trainNum: `${+rawTrainData.TrainNum}`,
+          trainNumRaw: `${+rawTrainData.TrainNum}`,
+          trainID: `${+rawTrainData.TrainNum}-${originDateOfMonth}`,
+          lat: property.geometry.coordinates[1],
+          lon: property.geometry.coordinates[0],
+          trainTimely: "",
+          iconColor: "#212529",
+          textColor: "#ffffff",
+          stations: stations,
+          heading: rawTrainData.Heading ? rawTrainData.Heading : "N",
+          eventCode: actualTrainEventCode,
+          eventTZ: stationMetaData.timeZones[trainEventCode],
+          eventName: stationMetaData.stationNames[trainEventCode],
+          origCode: actualOrigCode,
+          originTZ: stationMetaData.timeZones[rawTrainData.OrigCode],
+          origName: stationMetaData.stationNames[rawTrainData.OrigCode],
+          destCode: actualDestCode,
+          destTZ: stationMetaData.timeZones[rawTrainData.DestCode],
+          destName: stationMetaData.stationNames[rawTrainData.DestCode],
+          trainState: rawTrainData.TrainState,
+          velocity: +rawTrainData.Velocity,
+          statusMsg:
+            stations.filter(
+              (station) =>
+                !station.arr &&
+                !station.dep &&
+                station.code === trainEventCode
+            ).length > 0
+              ? "SERVICE DISRUPTION"
+              : rawTrainData.StatusMsg,
+          createdAt:
+            parseDate(rawTrainData.created_at, "America/New_York") ??
+            parseDate(rawTrainData.updated_at, "America/New_York"),
+          updatedAt:
+            parseDate(rawTrainData.updated_at, "America/New_York") ??
+            parseDate(rawTrainData.created_at, "America/New_York"),
+          lastValTS:
+            parseDate(rawTrainData.LastValTS, trainEventCode) ??
+            stations[0].schDep,
+          objectID: rawTrainData.OBJECTID,
+          provider: "Amtrak",
+          providerShort: "AMTK",
+          onlyOfTrainNum: true,
+          alerts: amtrakAlertsData['trains'][`${+rawTrainData.TrainNum}-${originDateOfMonth}`] ?? [],
+        };
+
+        const calculatedColors = calculateIconColor(train, allStations);
+        train.iconColor = calculatedColors['color'];
+        train.textColor = calculatedColors['text'];
+        train.stations = train.stations.map((stationRaw) => {
+          return {
+            ...stationRaw,
+            stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
+          }
+        });
+
+        if (!trains[rawTrainData.TrainNum]) trains[rawTrainData.TrainNum] = [];
+        trains[rawTrainData.TrainNum].push(train);
+
+        if (train.trainState === "Active") {
+          staleData.avgLastUpdate +=
+            nowCleaning - new Date(train.lastValTS).valueOf();
+          staleData.activeTrains++;
+        }
+      });
+    } catch (e) {
+      console.log("Error processing Amtrak data:", e.message);
+    }
+
+    // setting onlyOfTrainNum and deduplicating at the same time
+    Object.keys(trains).forEach((trainNum) => {
+      // deduplicating trains with the same ID
+      let trainIDs = [];
+      trains[trainNum] = trains[trainNum].filter((train) => {
+        if (trainIDs.includes(train.trainID)) return false;
+        trainIDs.push(train.trainID);
+        return true;
+      });
+
+      // setting onlyOfTrainNum 
+      trains[trainNum].forEach((train, i, arr) => {
+        trains[trainNum][i].onlyOfTrainNum = arr.length <= 1; // this should be an == but edge cases be damned
       });
     })
-    .catch((e) => {
-      console.log("Error fetching station data:", e);
-      shitsFucked = true;
+
+    staleData.avgLastUpdate =
+      staleData.avgLastUpdate / staleData.activeTrains;
+
+    if (staleData.avgLastUpdate > 1000 * 60 * 20) {
+      console.log("Data is stale, setting...");
+      staleData.stale = true;
+    }
+
+    Object.keys(allStations).forEach((stationKey) => {
+      amtrakerCache.setStation(stationKey, allStations[stationKey]);
     });
+
+    amtrakerCache.setTrains(trains);
+    console.log("set trains cache");
+    
+  } catch (e) {
+    console.log("Error in updateTrains:", e.message);
+    shitsFucked = true;
+  } finally {
+    isUpdatingTrains = false; // Always release the mutex
+  }
 };
 
 updateTrains();

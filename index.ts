@@ -478,11 +478,13 @@ try {
     attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "brightline"
   });
   const rawBrightline = JSON.parse(blTxt);
-  brightlineData = rawBrightline['v1'] ?? {};
+  // Ensure a safe shape so downstream code never crashes
+  brightlineData = rawBrightline['v1'] ?? { trains: {}, stations: {}, lastUpdated: null };
   brightlinePlatforms = rawBrightline['platforms'] ?? {};
 } catch (e) {
   console.log("[brightline] failed:", (e as Error).message);
-  brightlineData = {};
+  // Safe fallback shape
+  brightlineData = { trains: {}, stations: {}, lastUpdated: null };
   brightlinePlatforms = {};
 }
 
@@ -525,105 +527,105 @@ try {
             staleData.stale = false;
 
             Object.keys(brightlineData['trains']).forEach((trainNum) => {
-              const rawTrainData = brightlineData['trains'][trainNum];
+  const rawTrainData = brightlineData['trains'][trainNum];
 
-              if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
+  if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
 
-              const firstStation = rawTrainData['predictions'][0];
-              const lastStation = rawTrainData['predictions'].slice(-1)[0];
-              const trainEventStation = rawTrainData['predictions'].filter((station) => station.dep >= Date.now())[0] ?? lastStation;
+  const firstStation = rawTrainData['predictions'][0];
+  const lastStation = rawTrainData['predictions'].slice(-1)[0];
+  const trainEventStation = rawTrainData['predictions'].filter((station) => station.dep >= Date.now())[0] ?? lastStation;
 
-              let train: Train = {
-                routeName: 'Brightline',
-                trainNum: 'b' + trainNum,
-                trainNumRaw: trainNum,
-                trainID: 'b' + trainNum + '-' + new Date(firstStation.dep).getDate(),
-                lat: rawTrainData['lat'],
-                lon: rawTrainData['lon'],
-                trainTimely: "",
-                iconColor: "#212529",
-                textColor: "#ffffff",
-                stations: rawTrainData.predictions.map((prediction) => {
-                  const actualID = 'B' + prediction.stationID;
-                  if (!allStations[actualID]) {
-                    allStations[actualID] = {
-                      name: prediction.stationName,
-                      code: actualID,
-                      tz: prediction.tz,
-                      lat: brightlineData['stations'][prediction['stationID']]['lat'],
-                      lon: brightlineData['stations'][prediction['stationID']]['lon'],
-                      hasAddress: false,
-                      address1: "",
-                      address2: "",
-                      city: "",
-                      state: "",
-                      zip: 0,
-                      trains: [],
-                    }
-                  }
+  let train: Train = {
+    routeName: 'Brightline',
+    trainNum: 'b' + trainNum,
+    trainNumRaw: trainNum,
+    trainID: 'b' + trainNum + '-' + new Date(firstStation.dep).getDate(),
+    lat: rawTrainData['lat'],
+    lon: rawTrainData['lon'],
+    trainTimely: "",
+    iconColor: "#212529",
+    textColor: "#ffffff",
+    stations: rawTrainData.predictions.map((prediction) => {
+      const actualID = 'B' + prediction.stationID;
+      if (!allStations[actualID]) {
+        allStations[actualID] = {
+          name: prediction.stationName,
+          code: actualID,
+          tz: prediction.tz,
+          lat: brightlineData['stations'][prediction['stationID']]['lat'],
+          lon: brightlineData['stations'][prediction['stationID']]['lon'],
+          hasAddress: false,
+          address1: "",
+          address2: "",
+          city: "",
+          state: "",
+          zip: 0,
+          trains: [],
+        }
+      }
 
-                  allStations[actualID].trains.push(
-                    'b' + trainNum + '-' + new Date(firstStation.dep).getDate()
-                  );
+      allStations[actualID].trains.push(
+        'b' + trainNum + '-' + new Date(firstStation.dep).getDate()
+      );
 
-                  return {
-                    name: prediction['stationName'],
-                    code: actualID,
-                    tz: prediction['tz'],
-                    bus: false,
-                    schArr: new Date(prediction['arr'] - prediction['arrDelay']).toISOString(),
-                    schDep: new Date(prediction['dep'] - prediction['depDelay']).toISOString(),
-                    arr: new Date(prediction['arr']).toISOString(),
-                    dep: new Date(prediction['dep']).toISOString(),
-                    arrCmnt: "",
-                    depCmnt: "",
-                    status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
-                    stopIconColor: "#212529",
-                    platform: brightlinePlatforms[prediction.stationID] && brightlinePlatforms[prediction.stationID][trainNum] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
-                  };
-                }),
-                heading: ccDegToCardinal(rawTrainData.heading),
-                eventCode: 'B' + trainEventStation.stationID,
-                eventTZ: trainEventStation.tz,
-                eventName: trainEventStation.stationName,
-                origCode: 'B' + firstStation.stationID,
-                originTZ: firstStation.tz,
-                origName: firstStation.stationName,
-                destCode: 'B' + lastStation.stationID,
-                destTZ: lastStation.tz,
-                destName: lastStation.stationName,
-                trainState: "Active",
-                velocity: 0, // no data unfortunately
-                statusMsg: " ",
-                createdAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
-                updatedAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
-                lastValTS: brightlineData['lastUpdated'] ?? new Date().toISOString(),
-                objectID: Number(trainNum),
-                provider: "Brightline",
-                providerShort: "BLNE",
-                onlyOfTrainNum: true,
-                alerts: [],
-              };
+      return {
+        name: prediction['stationName'],
+        code: actualID,
+        tz: prediction['tz'],
+        bus: false,
+        schArr: new Date(prediction['arr'] - prediction['arrDelay']).toISOString(),
+        schDep: new Date(prediction['dep'] - prediction['depDelay']).toISOString(),
+        arr: new Date(prediction['arr']).toISOString(),
+        dep: new Date(prediction['dep']).toISOString(),
+        arrCmnt: "",
+        depCmnt: "",
+        status: prediction['dep'] > Date.valueOf() ? "Departed" : "Enroute",
+        stopIconColor: "#212529",
+        platform: brightlinePlatforms[prediction.stationID] && brightlinePlatforms[prediction.stationID][trainNum] ? brightlinePlatforms[prediction.stationID][trainNum] : "",
+      };
+    }),
+    heading: ccDegToCardinal(rawTrainData.heading),
+    eventCode: 'B' + trainEventStation.stationID,
+    eventTZ: trainEventStation.tz,
+    eventName: trainEventStation.stationName,
+    origCode: 'B' + firstStation.stationID,
+    originTZ: firstStation.tz,
+    origName: firstStation.stationName,
+    destCode: 'B' + lastStation.stationID,
+    destTZ: lastStation.tz,
+    destName: lastStation.stationName,
+    trainState: "Active",
+    velocity: 0, // no data unfortunately
+    statusMsg: " ",
+    createdAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+    updatedAt: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+    lastValTS: brightlineData['lastUpdated'] ?? new Date().toISOString(),
+    objectID: Number(trainNum),
+    provider: "Brightline",
+    providerShort: "BLNE",
+    onlyOfTrainNum: true,
+    alerts: [],
+  };
 
-              const calculatedColors = calculateIconColor(train, allStations);
-              train.iconColor = calculatedColors['color'];
-              train.textColor = calculatedColors['text'];
-              train.stations = train.stations.map((stationRaw) => {
-                return {
-                  ...stationRaw,
-                  stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
-                }
-              });
+  const calculatedColors = calculateIconColor(train, allStations);
+  train.iconColor = calculatedColors['color'];
+  train.textColor = calculatedColors['text'];
+  train.stations = train.stations.map((stationRaw) => {
+    return {
+      ...stationRaw,
+      stopIconColor: calculateIconColor(train, allStations, stationRaw.code)['color'],
+    }
+  });
 
-              if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
-              trains['b' + trainNum].push(train);
+  if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
+  trains['b' + trainNum].push(train);
 
-              if (train.trainState === "Active") {
-                staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.lastValTS).valueOf();
-                staleData.activeTrains++;
-              }
-            })
+  if (train.trainState === "Active") {
+    staleData.avgLastUpdate +=
+      nowCleaning - new Date(train.lastValTS).valueOf();
+    staleData.activeTrains++;
+  }
+})
 
             Object.keys(viaData).forEach((trainNum) => {
               const rawTrainData = viaData[trainNum];

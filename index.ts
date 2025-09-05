@@ -453,19 +453,38 @@ const updateTrains = async () => {
       console.log("AllTTMTrains fetch error");
     });
 
-  const platformRes = await fetch("https://platformsapi.amtraker.com/stations");
-  try {
-    trainPlatforms = await platformRes.json();
-  } catch (e) {
-    trainPlatforms = {};
-  }
+try {
+  const platformTxt = await fetchTextWithRetry("https://platformsapi.amtraker.com/stations", {
+    attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "platforms"
+  });
+  trainPlatforms = JSON.parse(platformTxt);
+} catch (e) {
+  console.log("[platforms] failed:", (e as Error).message);
+  trainPlatforms = {};
+}
 
-  const amtrakAlertsData = await fetch("https://store.transitstat.us/amtrak_alerts").then((res) => res.json());
+ let amtrakAlertsData: any = { trains: {} };
+try {
+  const alertsTxt = await fetchTextWithRetry("https://store.transitstat.us/amtrak_alerts", {
+    attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "amtrakAlerts"
+  });
+  amtrakAlertsData = JSON.parse(alertsTxt);
+} catch (e) {
+  console.log("[amtrakAlerts] failed:", (e as Error).message);
+}
 
-  const brightlineRes = await fetch('https://store.transitstat.us/brightline');
-  const rawBrightline = await brightlineRes.json();
-  brightlineData = rawBrightline['v1'];
-  brightlinePlatforms = rawBrightline['platforms'];
+try {
+  const blTxt = await fetchTextWithRetry("https://store.transitstat.us/brightline", {
+    attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "brightline"
+  });
+  const rawBrightline = JSON.parse(blTxt);
+  brightlineData = rawBrightline['v1'] ?? {};
+  brightlinePlatforms = rawBrightline['platforms'] ?? {};
+} catch (e) {
+  console.log("[brightline] failed:", (e as Error).message);
+  brightlineData = {};
+  brightlinePlatforms = {};
+}
 
   let trains: TrainResponse = {};
   let allStations: StationResponse = {};

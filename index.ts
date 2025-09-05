@@ -143,7 +143,6 @@ let AllTTMTrains = "";
 let trainPlatforms = {};
 let brightlineData = {};
 let brightlinePlatforms = {};
-let lastGoodAmtrakAlerts: any = { trains: {} };
 
 //https://stackoverflow.com/questions/196972/convert-string-to-title-case-with-javascript
 const title = (str: string) => {
@@ -464,23 +463,14 @@ try {
   trainPlatforms = {};
 }
 
-let amtrakAlertsData: any = lastGoodAmtrakAlerts; // default to last good
+ let amtrakAlertsData: any = { trains: {} };
 try {
   const alertsTxt = await fetchTextWithRetry("https://store.transitstat.us/amtrak_alerts", {
     attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "amtrakAlerts"
   });
-  const parsed = JSON.parse(alertsTxt);
-  // sanity check the shape before accepting
-  if (parsed && typeof parsed === "object" && parsed.trains && typeof parsed.trains === "object") {
-    amtrakAlertsData = parsed;
-    lastGoodAmtrakAlerts = parsed; // promote to last-good
-    // optional: console.log(`[amtrakAlerts] loaded ${Object.keys(parsed.trains).length} train alerts`);
-  } else {
-    console.log("[amtrakAlerts] bad shape; keeping last-good");
-  }
+  amtrakAlertsData = JSON.parse(alertsTxt);
 } catch (e) {
-  console.log("[amtrakAlerts] failed (using last-good):", (e as Error).message);
-  amtrakAlertsData = lastGoodAmtrakAlerts; // use cached alerts instead of empty
+  console.log("[amtrakAlerts] failed:", (e as Error).message);
 }
 
 try {

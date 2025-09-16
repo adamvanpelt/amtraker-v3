@@ -641,6 +641,7 @@ try {
 
               const firstStation = sortedStations[0];
               const lastStation = sortedStations[sortedStations.length - 1];
+
 // Prefer next non-ARR event, else first with known coords, else first
 const trainEventStation =
   sortedStations.find((s) => s.eta !== "ARR")
@@ -650,12 +651,16 @@ const trainEventStation =
 const eventCode = trainEventStation?.code;
 const eventCoords = eventCode ? stationMetaData.viaCoords[eventCode] : undefined;
 
-// Fallbacks: raw lat/lng from VIA payload, else any station we have coords for, else [0,0]
-const fallbackFromRaw = (rawTrainData.lat != null && rawTrainData.lng != null)
-  ? [rawTrainData.lat, rawTrainData.lng] as [number, number]
-  : undefined;
+// 1) Use VIA realtime coords if present (most accurate for in-between positions)
+// 2) Else use the chosen event station coords
+// 3) Else fall back to any station we have coords for
+// 4) Else [0, 0]
+const fromRaw =
+  (rawTrainData.lat != null && rawTrainData.lng != null)
+    ? [Number(rawTrainData.lat), Number(rawTrainData.lng)] as [number, number]
+    : undefined;
 
-const fallbackFromAny = (() => {
+const fromAnyStation = (() => {
   for (const s of sortedStations) {
     const c = stationMetaData.viaCoords[s.code];
     if (c) return c as [number, number];
@@ -663,7 +668,7 @@ const fallbackFromAny = (() => {
   return undefined;
 })();
 
-const [safeLat, safeLon] = (eventCoords ?? fallbackFromRaw ?? fallbackFromAny ?? [0, 0]) as [number, number];
+const [safeLat, safeLon] = (fromRaw ?? eventCoords ?? fromAnyStation ?? [0, 0]) as [number, number];
 
 // Ensure this exists so the map() below can safely update it
 let trainDelay = 0;

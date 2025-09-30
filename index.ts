@@ -226,9 +226,15 @@ const fetchAmtrakStationsForCleaning = async () => {
       JSON.parse(decrypted)?.StationsDataResponse
     );
 
-    return decrypted.length > 0
-      ? JSON.parse(decrypted)?.StationsDataResponse?.features
-      : rawStations.features;
+    const parsed = JSON.parse(decrypted);
+const stationsResp = parsed?.StationsDataResponse;
+const features = stationsResp?.features;
+
+// Keep a useful snapshot
+decryptedStationData = JSON.stringify(stationsResp ?? []);
+
+// ✅ Always return an array
+return Array.isArray(features) ? features : rawStations.features;
   } catch (e) {
     //console.log("stations e:", e.toString());
     decryptedStationData = JSON.stringify(rawStations.features);
@@ -491,11 +497,11 @@ try {
   let trains: TrainResponse = {};
   let allStations: StationResponse = {};
 
-  fetchViaForCleaning()
+    fetchViaForCleaning()
     .then((viaData) => {
-      fetchAmtrakStationsForCleaning().then((stationData) => {
-        console.log("fetched s");
-        stationData.forEach((station) => {
+    return fetchAmtrakStationsForCleaning().then((stationData) => {
+      console.log("fetched s");
+      (Array.isArray(stationData) ? stationData : rawStations.features).forEach((station) => {
           const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
 
           const stationObj = {

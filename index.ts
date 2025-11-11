@@ -988,7 +988,7 @@ let train: Train = {
 
 updateTrains();
 
-schedule.scheduleJob("*/5 * * * *", updateTrains);
+schedule.scheduleJob("*/3 * * * *", updateTrains);
 
 Bun.serve({
   port: process.env.PORT ?? 3001,

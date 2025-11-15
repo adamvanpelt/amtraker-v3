@@ -27,6 +27,7 @@ const blobsToRemove = [
 ];
 
 // VIA Rail 4-letter station codes → Amtrak 3-letter station codes
+// (kept here in case we ever go back to station-based queries)
 const viaToAmtrakStationMap = {
   MTRL: "MTR",
   TRTO: "TWO",
@@ -136,56 +137,12 @@ const updateFeed = async (updateConfig) => {
 
       const trainNum = splitID[0]; // e.g. "22"
       const trainDate = `20${splitID[3]}-${splitID[1].padStart(2, '0')}-${splitID[2].padStart(2, '0')}`; // YYYY-MM-DD
-      const shortID = `${trainNum}-${splitID[2]}`; // initial guess, e.g. "22-15"
+      const shortID = `${trainNum}-${splitID[2]}`; // e.g. "22-15" — this is the canonical ID we want to use
       const timeBeforeFetch = Date.now();
 
-      // 2) Fetch train details from your Railway Amtraker instance
-      //    Use the *short* ID (trainNum-dayOfMonth), e.g. /v3/trains/22-15
-      let destCode = null;
-      try {
-        const trainDetailRes = await fetch(`https://ttp-amtraker.up.railway.app/v3/trains/${shortID}`)
-          .then((res) => res.json());
-
-        // trainDetailRes should look like { "22": [ { destCode: "...", ... }, ... ] }
-        const trainsForNum = trainDetailRes[trainNum];
-        if (Array.isArray(trainsForNum) && trainsForNum.length > 0) {
-          destCode = trainsForNum[0].destCode || trainsForNum[0].dest?.code || null;
-        }
-      } catch (e) {
-        console.log('error fetching train details for', shortID, e.toString());
-      }
-
-      if (!destCode) {
-        // If we can't determine a destination station, record an error and skip
-        responseObject.meta.errorsEncountered.push({
-          trainID: shortID,
-          code: 'NO_DEST_CODE',
-          message: `Could not determine destination station for train ${trainID}`,
-        });
-        continue;
-      }
-
-      // Normalize to a 3-letter Amtrak station code when possible.
-      // If we see a VIA 4-letter code (MTRL, TRTO, VCVR, etc.), map it.
-      let amtrakDestCode = destCode;
-      if (viaToAmtrakStationMap[destCode]) {
-        amtrakDestCode = viaToAmtrakStationMap[destCode];
-      }
-
-      // Guard: only query Amtrak with valid 3-letter codes
-      if (!amtrakDestCode || amtrakDestCode.length !== 3) {
-        console.log('[alerts] skipping non-Amtrak dest code', destCode, '→', amtrakDestCode, 'for', shortID);
-        responseObject.meta.errorsEncountered.push({
-          trainID: shortID,
-          code: 'NON_AMTRAK_DEST_CODE',
-          message: `Destination station code ${destCode} could not be normalized to a 3-letter Amtrak code`,
-        });
-        continue;
-      }
-
-      // 3) Call the Amtrak endpoint using the (normalized) destination station code
-      //    /dotcom/travel-service/statuses/stops/{amtrakDestCode}?service-numbers={trainNum}&departure-date={trainDate}
-      const amtrakURL = `https://www.amtrak.com/dotcom/travel-service/statuses/stops/${amtrakDestCode}?service-numbers=${trainNum}&departure-date=${trainDate}`;
+      // 2) Call the Amtrak *train-level* endpoint:
+      //    /dotcom/travel-service/statuses/{trainNum}?service-date={trainDate}
+      const amtrakURL = `https://www.amtrak.com/dotcom/travel-service/statuses/${trainNum}?service-date=${trainDate}`;
 
       const trainDataRes = await fetch(amtrakURL, {
         "credentials": "include",
@@ -210,8 +167,7 @@ const updateFeed = async (updateConfig) => {
           return { error: { message: e.toString() } };
         });
 
-      // New JSON shape: { data: [ stop, stop, ... ] }
-      if (!trainDataRes || !Array.isArray(trainDataRes.data) || trainDataRes.data.length === 0) {
+      if (!trainDataRes || !trainDataRes.data) {
         responseObject.meta.errorsEncountered.push({
           trainID: shortID,
           ...(trainDataRes && trainDataRes.error ? trainDataRes.error : {}),
@@ -219,58 +175,47 @@ const updateFeed = async (updateConfig) => {
         continue;
       }
 
-      // ---- Date-aware but *non-fatal* logic ----
-      let finalShortID = shortID;
-      let stopsForThisTrain = trainDataRes.data;
+      // Amtrak has used a couple of shapes here; be defensive:
+      //  - data: [ { stops: [...] } ]
+      //  - data: [ /* stops directly */ ]
+      let stops = [];
 
       try {
-        // Prefer only the records whose travelService.date matches our trainDate
-        const sameServiceDateStops = trainDataRes.data.filter(
-          (s) => s.travelService && s.travelService.date === trainDate
-        );
+        if (Array.isArray(trainDataRes.data) && trainDataRes.data.length > 0) {
+          const first = trainDataRes.data[0];
 
-        if (sameServiceDateStops.length > 0) {
-          stopsForThisTrain = sameServiceDateStops;
-
-          const svcDateStr = sameServiceDateStops[0].travelService.date; // e.g. "2025-11-14"
-          const svcDate = new Date(svcDateStr);
-          if (!isNaN(svcDate.getTime())) {
-            const svcDay = svcDate.getDate(); // 14 or 15
-            const recomputedShortID = `${trainNum}-${svcDay}`;
-
-            if (recomputedShortID !== shortID) {
-              console.log(
-                `[alerts] remapped ${shortID} → ${recomputedShortID} using travelService.date=${svcDateStr}`
-              );
-            }
-
-            finalShortID = recomputedShortID;
+          if (Array.isArray(first.stops)) {
+            // Newer/expected shape: first element is a train object with stops[]
+            stops = first.stops;
+          } else if (Array.isArray(trainDataRes.data)) {
+            // Fallback: treat data itself as the stops array
+            stops = trainDataRes.data;
           }
-        } else {
-          // No exact date match – log but keep all records and keep the original key
-          console.log(
-            `[alerts] no stops with travelService.date === ${trainDate} for ${shortID}; using all ${stopsForThisTrain.length} records and keeping key ${finalShortID}`
-          );
         }
       } catch (e) {
-        console.log(
-          '[alerts] failed to apply date-aware logic for',
-          shortID,
-          e.toString()
-        );
+        console.log('[alerts] error normalizing stops for', shortID, e.toString());
       }
-      // ---- End date-aware logic ----
 
-      // Adapt to existing extractor, which expects train.stops[]
-      const alerts = extractAlertsFromTrain({ stops: stopsForThisTrain });
+      if (!Array.isArray(stops) || stops.length === 0) {
+        responseObject.meta.errorsEncountered.push({
+          trainID: shortID,
+          code: 'NO_STOPS',
+          message: 'No stops array found in Amtrak response',
+        });
+        continue;
+      }
+
+      // Extract alerts from the normalized stops
+      const alerts = extractAlertsFromTrain({ stops });
 
       if (alerts.length > 0) {
-        responseObject.trains[finalShortID] = alerts;
+        // 🔑 Always key by our canonical shortID (trainNum-dayOfMonth)
+        responseObject.trains[shortID] = alerts;
         responseObject.meta.numWithAlerts++;
-        responseObject.meta.trainsWithAlerts.push(finalShortID);
+        responseObject.meta.trainsWithAlerts.push(shortID);
       } else {
         responseObject.meta.numWithoutAlerts++;
-        responseObject.meta.trainsWithoutAlerts.push(finalShortID);
+        responseObject.meta.trainsWithoutAlerts.push(shortID);
       }
 
       // NOTE: original code didn't await this sleep, so leaving behavior unchanged

@@ -471,7 +471,7 @@ try {
 
  let amtrakAlertsData: any = { trains: {} };
 try {
-  const alertsTxt = await fetchTextWithRetry("https://store.transitstat.us/amtrak_alerts", {
+    const alertsTxt = await fetchTextWithRetry("https://ttp-alerts-production.up.railway.app/amtrak_alerts", {
     attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "amtrakAlerts"
   });
   amtrakAlertsData = JSON.parse(alertsTxt);

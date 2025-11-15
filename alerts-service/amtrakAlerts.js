@@ -211,43 +211,67 @@ const updateFeed = async (updateConfig) => {
         });
 
       // New JSON shape: { data: [ stop, stop, ... ] }
-if (!trainDataRes || !Array.isArray(trainDataRes.data) || trainDataRes.data.length === 0) {
-  responseObject.meta.errorsEncountered.push({
-    trainID: shortID,
-    ...(trainDataRes && trainDataRes.error ? trainDataRes.error : {}),
-  });
-  continue;
-}
+      if (!trainDataRes || !Array.isArray(trainDataRes.data) || trainDataRes.data.length === 0) {
+        responseObject.meta.errorsEncountered.push({
+          trainID: shortID,
+          ...(trainDataRes && trainDataRes.error ? trainDataRes.error : {}),
+        });
+        continue;
+      }
 
-// 🔍 Filter to the correct service date so we don't mix 8-13 and 8-14, etc.
-const sameServiceDateStops = trainDataRes.data.filter(
-  (s) => s.travelService && s.travelService.date === trainDate
-);
+      // ---- Date-aware but *non-fatal* logic ----
+      let finalShortID = shortID;
+      let stopsForThisTrain = trainDataRes.data;
 
-if (!sameServiceDateStops.length) {
-  // Nothing for this date – log for debugging and skip
-  console.log(
-    `[alerts] no stops for ${trainNum} on ${trainDate}, had ${trainDataRes.data.length} total records`
-  );
-  responseObject.meta.errorsEncountered.push({
-    trainID: shortID,
-    code: "NO_MATCHING_SERVICE_DATE",
-    message: `No records with travelService.date === ${trainDate}`,
-  });
-  continue;
-}
+      try {
+        // Prefer only the records whose travelService.date matches our trainDate
+        const sameServiceDateStops = trainDataRes.data.filter(
+          (s) => s.travelService && s.travelService.date === trainDate
+        );
 
-// Adapt to existing extractor, which expects train.stops[]
-const alerts = extractAlertsFromTrain({ stops: sameServiceDateStops });
+        if (sameServiceDateStops.length > 0) {
+          stopsForThisTrain = sameServiceDateStops;
 
-if (alerts.length > 0) {
-  responseObject.trains[shortID] = alerts;
-  responseObject.meta.numWithAlerts++;
-  responseObject.meta.trainsWithAlerts.push(shortID);
-} else {
-  responseObject.meta.numWithoutAlerts++;
-  responseObject.meta.trainsWithoutAlerts.push(shortID);
-}
+          const svcDateStr = sameServiceDateStops[0].travelService.date; // e.g. "2025-11-14"
+          const svcDate = new Date(svcDateStr);
+          if (!isNaN(svcDate.getTime())) {
+            const svcDay = svcDate.getDate(); // 14 or 15
+            const recomputedShortID = `${trainNum}-${svcDay}`;
+
+            if (recomputedShortID !== shortID) {
+              console.log(
+                `[alerts] remapped ${shortID} → ${recomputedShortID} using travelService.date=${svcDateStr}`
+              );
+            }
+
+            finalShortID = recomputedShortID;
+          }
+        } else {
+          // No exact date match – log but keep all records and keep the original key
+          console.log(
+            `[alerts] no stops with travelService.date === ${trainDate} for ${shortID}; using all ${stopsForThisTrain.length} records and keeping key ${finalShortID}`
+          );
+        }
+      } catch (e) {
+        console.log(
+          '[alerts] failed to apply date-aware logic for',
+          shortID,
+          e.toString()
+        );
+      }
+      // ---- End date-aware logic ----
+
+      // Adapt to existing extractor, which expects train.stops[]
+      const alerts = extractAlertsFromTrain({ stops: stopsForThisTrain });
+
+      if (alerts.length > 0) {
+        responseObject.trains[finalShortID] = alerts;
+        responseObject.meta.numWithAlerts++;
+        responseObject.meta.trainsWithAlerts.push(finalShortID);
+      } else {
+        responseObject.meta.numWithoutAlerts++;
+        responseObject.meta.trainsWithoutAlerts.push(finalShortID);
+      }
 
       // NOTE: original code didn't await this sleep, so leaving behavior unchanged
       sleep(Date.now() - timeBeforeFetch + 250 + 25); // making sure the time between now and when we started the fetch has been at least 250ms, but doing 275 for safety

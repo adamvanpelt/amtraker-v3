@@ -77,8 +77,26 @@ const updateFeed = async (updateConfig) => {
       },
     };
 
-    // 1) Get list of active train IDs (these are extended IDs like 22-11-15-25)
-    const trainIDs = await fetch('https://ttp-amtraker.up.railway.app/v3/ids').then((res) => res.json());
+    // 1) Get list of active train IDs from YOUR Amtraker instance
+    //    e.g. ["22-11-15-25", "6-11-14-25", ...]
+    let trainIDs = await fetch('https://ttp-amtraker.up.railway.app/v3/ids').then((res) => res.json());
+
+    // Normalize in case /v3/ids ever returns a non-array structure
+    if (!Array.isArray(trainIDs)) {
+      console.log('[alerts] /v3/ids returned non-array, attempting to normalize');
+      if (trainIDs && typeof trainIDs === 'object') {
+        // e.g. { "0": "22-11-15-25", "1": "6-11-14-25", ... }
+        trainIDs = Object.values(trainIDs).flat();
+      } else {
+        trainIDs = [];
+      }
+    }
+
+    if (trainIDs.length === 0) {
+      console.log('[alerts] No train IDs returned from /v3/ids');
+    } else {
+      console.log(`[alerts] Retrieved ${trainIDs.length} train IDs from /v3/ids`);
+    }
 
     // Keep this setup call as in the original script
     const setupFetchRes = await nodeFetch("https://www.amtrak.com/eymoNXDNm7bbwqa38ydg/3aO5GVz2f06z3X/XmE7QS8hAQ/WQE8U14D/NEE", {
@@ -121,7 +139,7 @@ const updateFeed = async (updateConfig) => {
         const trainDetailRes = await fetch(`https://ttp-amtraker.up.railway.app/v3/trains/${shortID}`)
           .then((res) => res.json());
 
-        // trainDetailRes should look like { "22": [ { destCode: "CHI", ... }, ... ] }
+        // trainDetailRes should look like { "22": [ { destCode: "...", ... }, ... ] }
         const trainsForNum = trainDetailRes[trainNum];
         if (Array.isArray(trainsForNum) && trainsForNum.length > 0) {
           destCode = trainsForNum[0].destCode || trainsForNum[0].dest?.code || null;
@@ -140,7 +158,7 @@ const updateFeed = async (updateConfig) => {
         continue;
       }
 
-      // 3) Call the NEW Amtrak endpoint using the destination station code
+      // 3) Call the Amtrak endpoint using the destination station code
       //    /dotcom/travel-service/statuses/stops/{destCode}?service-numbers={trainNum}&departure-date={trainDate}
       const amtrakURL = `https://www.amtrak.com/dotcom/travel-service/statuses/stops/${destCode}?service-numbers=${trainNum}&departure-date=${trainDate}`;
 

@@ -26,6 +26,13 @@ const blobsToRemove = [
   "Updates to come."
 ];
 
+// VIA Rail 4-letter station codes → Amtrak 3-letter station codes
+const viaToAmtrakStationMap = {
+  MTRL: "MTR",
+  TRTO: "TWO",
+  VCVR: "VAC",
+};
+
 const extractAlertsFromTrain = (train) => {
   let alertTextsRaw = [];
   let alertTextsComparable = [];
@@ -158,9 +165,27 @@ const updateFeed = async (updateConfig) => {
         continue;
       }
 
-      // 3) Call the Amtrak endpoint using the destination station code
-      //    /dotcom/travel-service/statuses/stops/{destCode}?service-numbers={trainNum}&departure-date={trainDate}
-      const amtrakURL = `https://www.amtrak.com/dotcom/travel-service/statuses/stops/${destCode}?service-numbers=${trainNum}&departure-date=${trainDate}`;
+      // Normalize to a 3-letter Amtrak station code when possible.
+      // If we see a VIA 4-letter code (MTRL, TRTO, VCVR, etc.), map it.
+      let amtrakDestCode = destCode;
+      if (viaToAmtrakStationMap[destCode]) {
+        amtrakDestCode = viaToAmtrakStationMap[destCode];
+      }
+
+      // Guard: only query Amtrak with valid 3-letter codes
+      if (!amtrakDestCode || amtrakDestCode.length !== 3) {
+        console.log('[alerts] skipping non-Amtrak dest code', destCode, '→', amtrakDestCode, 'for', shortID);
+        responseObject.meta.errorsEncountered.push({
+          trainID: shortID,
+          code: 'NON_AMTRAK_DEST_CODE',
+          message: `Destination station code ${destCode} could not be normalized to a 3-letter Amtrak code`,
+        });
+        continue;
+      }
+
+      // 3) Call the Amtrak endpoint using the (normalized) destination station code
+      //    /dotcom/travel-service/statuses/stops/{amtrakDestCode}?service-numbers={trainNum}&departure-date={trainDate}
+      const amtrakURL = `https://www.amtrak.com/dotcom/travel-service/statuses/stops/${amtrakDestCode}?service-numbers=${trainNum}&departure-date=${trainDate}`;
 
       const trainDataRes = await fetch(amtrakURL, {
         "credentials": "include",

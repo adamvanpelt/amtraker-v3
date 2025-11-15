@@ -77,11 +77,10 @@ const updateFeed = async (updateConfig) => {
       },
     };
 
-    // 1) Get list of active train IDs from Amtraker v3
+    // 1) Get list of active train IDs (these are extended IDs like 22-11-15-25)
     const trainIDs = await fetch('https://ttp-amtraker.up.railway.app/v3/ids').then((res) => res.json());
 
-    // Old setup request (left in place to avoid behavior changes, even though the new endpoint
-    // does not actually require this pre-flight).
+    // Keep this setup call as in the original script
     const setupFetchRes = await nodeFetch("https://www.amtrak.com/eymoNXDNm7bbwqa38ydg/3aO5GVz2f06z3X/XmE7QS8hAQ/WQE8U14D/NEE", {
       "credentials": "include",
       "headers": {
@@ -110,26 +109,25 @@ const updateFeed = async (updateConfig) => {
 
       const splitID = trainID.split('-');
 
-      const trainNum = splitID[0];
-      const trainDate = `20${splitID[3]}-${splitID[1].padStart(2, '0')}-${splitID[2].padStart(2, '0')}`;
-      const shortID = `${trainNum}-${splitID[2]}`;
-
+      const trainNum = splitID[0]; // e.g. "22"
+      const trainDate = `20${splitID[3]}-${splitID[1].padStart(2, '0')}-${splitID[2].padStart(2, '0')}`; // YYYY-MM-DD
+      const shortID = `${trainNum}-${splitID[2]}`; // e.g. "22-15"
       const timeBeforeFetch = Date.now();
 
       // 2) Fetch train details from your Railway Amtraker instance
-      //    so we can get the destination station code (destCode)
+      //    Use the *short* ID (trainNum-dayOfMonth), e.g. /v3/trains/22-15
       let destCode = null;
       try {
-        const trainDetailRes = await fetch(`https://ttp-amtraker.up.railway.app/v3/trains/${trainID}`)
+        const trainDetailRes = await fetch(`https://ttp-amtraker.up.railway.app/v3/trains/${shortID}`)
           .then((res) => res.json());
 
-        // trainDetailRes should look like { "6": [ { destCode: "CHI", ... }, ... ] }
+        // trainDetailRes should look like { "22": [ { destCode: "CHI", ... }, ... ] }
         const trainsForNum = trainDetailRes[trainNum];
         if (Array.isArray(trainsForNum) && trainsForNum.length > 0) {
           destCode = trainsForNum[0].destCode || trainsForNum[0].dest?.code || null;
         }
       } catch (e) {
-        console.log('error fetching train details for', trainID, e.toString());
+        console.log('error fetching train details for', shortID, e.toString());
       }
 
       if (!destCode) {

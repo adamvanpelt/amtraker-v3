@@ -136,7 +136,7 @@ const updateFeed = async (updateConfig) => {
 
       const trainNum = splitID[0]; // e.g. "22"
       const trainDate = `20${splitID[3]}-${splitID[1].padStart(2, '0')}-${splitID[2].padStart(2, '0')}`; // YYYY-MM-DD
-      const shortID = `${trainNum}-${splitID[2]}`; // e.g. "22-15"
+      const shortID = `${trainNum}-${splitID[2]}`; // initial guess, e.g. "22-15"
       const timeBeforeFetch = Date.now();
 
       // 2) Fetch train details from your Railway Amtraker instance
@@ -219,16 +219,36 @@ const updateFeed = async (updateConfig) => {
         continue;
       }
 
+      // 🔑 Adjust shortID based on Amtrak's own service date to avoid 22-14 / 22-15 flips
+      let finalShortID = shortID;
+      try {
+        const firstRecord = trainDataRes.data[0];
+        const svcDateStr = firstRecord?.travelService?.date; // e.g. "2025-11-15"
+        if (svcDateStr) {
+          const svcDate = new Date(svcDateStr);
+          if (!isNaN(svcDate.getTime())) {
+            const svcDay = svcDate.getDate(); // 14 or 15
+            const recomputedShortID = `${trainNum}-${svcDay}`;
+            if (recomputedShortID !== shortID) {
+              console.log(`[alerts] remapped ${shortID} → ${recomputedShortID} using travelService.date=${svcDateStr}`);
+            }
+            finalShortID = recomputedShortID;
+          }
+        }
+      } catch (e) {
+        console.log('[alerts] failed to derive finalShortID from travelService.date for', shortID, e.toString());
+      }
+
       // Adapt to existing extractor, which expects train.stops[]
       const alerts = extractAlertsFromTrain({ stops: trainDataRes.data });
 
       if (alerts.length > 0) {
-        responseObject.trains[shortID] = alerts;
+        responseObject.trains[finalShortID] = alerts;
         responseObject.meta.numWithAlerts++;
-        responseObject.meta.trainsWithAlerts.push(shortID);
+        responseObject.meta.trainsWithAlerts.push(finalShortID);
       } else {
         responseObject.meta.numWithoutAlerts++;
-        responseObject.meta.trainsWithoutAlerts.push(shortID);
+        responseObject.meta.trainsWithoutAlerts.push(finalShortID);
       }
 
       // NOTE: original code didn't await this sleep, so leaving behavior unchanged

@@ -211,45 +211,43 @@ const updateFeed = async (updateConfig) => {
         });
 
       // New JSON shape: { data: [ stop, stop, ... ] }
-      if (!trainDataRes || !Array.isArray(trainDataRes.data) || trainDataRes.data.length === 0) {
-        responseObject.meta.errorsEncountered.push({
-          trainID: shortID,
-          ...(trainDataRes && trainDataRes.error ? trainDataRes.error : {}),
-        });
-        continue;
-      }
+if (!trainDataRes || !Array.isArray(trainDataRes.data) || trainDataRes.data.length === 0) {
+  responseObject.meta.errorsEncountered.push({
+    trainID: shortID,
+    ...(trainDataRes && trainDataRes.error ? trainDataRes.error : {}),
+  });
+  continue;
+}
 
-      // 🔑 Adjust shortID based on Amtrak's own service date to avoid 22-14 / 22-15 flips
-      let finalShortID = shortID;
-      try {
-        const firstRecord = trainDataRes.data[0];
-        const svcDateStr = firstRecord?.travelService?.date; // e.g. "2025-11-15"
-        if (svcDateStr) {
-          const svcDate = new Date(svcDateStr);
-          if (!isNaN(svcDate.getTime())) {
-            const svcDay = svcDate.getDate(); // 14 or 15
-            const recomputedShortID = `${trainNum}-${svcDay}`;
-            if (recomputedShortID !== shortID) {
-              console.log(`[alerts] remapped ${shortID} → ${recomputedShortID} using travelService.date=${svcDateStr}`);
-            }
-            finalShortID = recomputedShortID;
-          }
-        }
-      } catch (e) {
-        console.log('[alerts] failed to derive finalShortID from travelService.date for', shortID, e.toString());
-      }
+// 🔍 Filter to the correct service date so we don't mix 8-13 and 8-14, etc.
+const sameServiceDateStops = trainDataRes.data.filter(
+  (s) => s.travelService && s.travelService.date === trainDate
+);
 
-      // Adapt to existing extractor, which expects train.stops[]
-      const alerts = extractAlertsFromTrain({ stops: trainDataRes.data });
+if (!sameServiceDateStops.length) {
+  // Nothing for this date – log for debugging and skip
+  console.log(
+    `[alerts] no stops for ${trainNum} on ${trainDate}, had ${trainDataRes.data.length} total records`
+  );
+  responseObject.meta.errorsEncountered.push({
+    trainID: shortID,
+    code: "NO_MATCHING_SERVICE_DATE",
+    message: `No records with travelService.date === ${trainDate}`,
+  });
+  continue;
+}
 
-      if (alerts.length > 0) {
-        responseObject.trains[finalShortID] = alerts;
-        responseObject.meta.numWithAlerts++;
-        responseObject.meta.trainsWithAlerts.push(finalShortID);
-      } else {
-        responseObject.meta.numWithoutAlerts++;
-        responseObject.meta.trainsWithoutAlerts.push(finalShortID);
-      }
+// Adapt to existing extractor, which expects train.stops[]
+const alerts = extractAlertsFromTrain({ stops: sameServiceDateStops });
+
+if (alerts.length > 0) {
+  responseObject.trains[shortID] = alerts;
+  responseObject.meta.numWithAlerts++;
+  responseObject.meta.trainsWithAlerts.push(shortID);
+} else {
+  responseObject.meta.numWithoutAlerts++;
+  responseObject.meta.trainsWithoutAlerts.push(shortID);
+}
 
       // NOTE: original code didn't await this sleep, so leaving behavior unchanged
       sleep(Date.now() - timeBeforeFetch + 250 + 25); // making sure the time between now and when we started the fetch has been at least 250ms, but doing 275 for safety

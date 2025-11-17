@@ -263,6 +263,34 @@ const fetchViaForCleaning = async () => {
   }
 };
 
+// Normalize VIA alerts to match Amtrak-style alerts: [{ message: string }]
+const normalizeViaAlerts = (rawTrainData: RawViaTrain) => {
+  const rawAlerts = (rawTrainData as any).alerts ?? [];
+
+  return rawAlerts
+    .map((alert: any) => {
+      const headerEn = alert.header?.en ?? "";
+      const headerFr = alert.header?.fr ?? "";
+      const descEn = alert.description?.en ?? "";
+      const descFr = alert.description?.fr ?? "";
+
+      const header = headerEn || headerFr || "";
+      const description = descEn || descFr || "";
+
+      // If both are empty, skip this alert
+      if (!header && !description) return null;
+
+      const parts: string[] = [];
+      if (header) parts.push(header.trim());
+      if (description) parts.push(description.trim());
+
+      const message = parts.join(": ");
+
+      return { message };
+    })
+    .filter((a: any) => a !== null);
+};
+
 const parseDate = (badDate: string | null, code: string | null) => {
   if (code == null) code = "America/New_York";
 
@@ -766,7 +794,7 @@ let train: Train = {
   provider: "Via",
   providerShort: "VIA",
   onlyOfTrainNum: true,
-  alerts: [],
+  alerts: normalizeViaAlerts(rawTrainData),
 };
 
               const calculatedColors = calculateIconColor(train, allStations);

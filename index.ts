@@ -295,23 +295,9 @@ const parseDate = (badDate: string | null, code: string | null) => {
   if (code == null) code = "America/New_York";
 
   if (badDate == null || code == null) return null;
-
-  //first is standard time, second is daylight savings
-  const offsets = {
-    "America/New_York": ["-05:00", "-04:00"],
-    "America/Detroit": ["-05:00", "-04:00"],
-    "America/Chicago": ["-06:00", "-05:00"],
-    "America/Denver": ["-07:00", "-06:00"],
-    "America/Phoenix": ["-07:00", "-07:00"],
-    "America/Los_Angeles": ["-08:00", "-07:00"],
-    "America/Boise": ["-07:00", "-06:00"],
-    "America/Toronto": ["-05:00", "-04:00"],
-    "America/Indiana/Indianapolis": ["-05:00", "-04:00"],
-    "America/Kentucky/Louisville": ["-05:00", "-04:00"],
-    "America/Vancouver": ["-08:00", "-07:00"],
-  };
-
-  const timeZone = stationMetaData.timeZones[code] ?? "America/New_York";
+  const timeZone =
+    stationMetaData.timeZones[code] ??
+    (moment.tz.zone(code) ? code : "America/New_York");
 
   try {
     const dateArr = badDate.split(" ");
@@ -339,16 +325,17 @@ const parseDate = (badDate: string | null, code: string | null) => {
     const minute = HMS[1].toString().padStart(2, "0");
     const second = HMS[2].toString().padStart(2, "0");
 
-    const now = new Date();
-    const nowYear = now.getFullYear();
-    let dst_start = new Date(nowYear, 2, 14);
-    let dst_end = new Date(nowYear, 10, 7);
-    dst_start.setDate(14 - dst_start.getDay()); // adjust date to 2nd Sunday
-    dst_end.setDate(7 - dst_end.getDay()); // adjust date to the 1st Sunday
+    const parsed = moment.tz(
+      `${year}-${month}-${date} ${hour}:${minute}:${second}`,
+      "YYYY-MM-DD HH:mm:ss",
+      timeZone
+    );
 
-    const isDST = Number(now >= dst_start && now < dst_end);
+    if (!parsed.isValid()) {
+      throw new Error(`Invalid parsed date for ${badDate} in ${timeZone}`);
+    }
 
-    return `${year}-${month}-${date}T${hour}:${minute}:${second}${offsets[timeZone][isDST]}`;
+    return parsed.format("YYYY-MM-DDTHH:mm:ssZ");
   } catch (e) {
     console.log("Couldn't parse date:", badDate, code);
     return null;

@@ -555,6 +555,8 @@ const updateTrains = async () => {
           amtrakerCache.setStation(actualCode, stationObj);
         });
 
+    console.log(`[updateTrains] station normalization complete in ${Date.now() - transformStartedAt}ms`);
+
     const amtrakFetchStartedAt = Date.now();
     const amtrakData = await fetchAmtrakTrainsForCleaning();
     console.log(`[updateTrains] amtrak fetch complete in ${Date.now() - amtrakFetchStartedAt}ms`);
@@ -565,6 +567,7 @@ const updateTrains = async () => {
     staleData.avgLastUpdate = 0;
     staleData.stale = false;
 
+    const brightlineTransformStartedAt = Date.now();
     Object.keys(brightlineData['trains']).forEach((trainNum) => {
   const rawTrainData = brightlineData['trains'][trainNum];
 
@@ -665,7 +668,9 @@ const updateTrains = async () => {
     staleData.activeTrains++;
   }
 })
+    console.log(`[updateTrains] brightline transform complete in ${Date.now() - brightlineTransformStartedAt}ms`);
 
+    const viaTransformStartedAt = Date.now();
     Object.keys(viaData).forEach((trainNum) => {
               const rawTrainData = viaData[trainNum];
               const actualTrainNum = "v" + trainNum.split(" ")[0];
@@ -821,7 +826,9 @@ let train: Train = {
                 staleData.activeTrains++;
               }
             });
+    console.log(`[updateTrains] via transform complete in ${Date.now() - viaTransformStartedAt}ms`);
 
+    const amtrakTransformStartedAt = Date.now();
     amtrakData.forEach((property) => {
               let rawTrainData = property.properties;
 
@@ -968,8 +975,10 @@ let train: Train = {
                 staleData.activeTrains++;
               }
             });
+    console.log(`[updateTrains] amtrak transform complete in ${Date.now() - amtrakTransformStartedAt}ms`);
 
     // setting onlyOfTrainNum and deduplicating at the same time
+    const dedupeStartedAt = Date.now();
     Object.keys(trains).forEach((trainNum) => {
               // deduplicating trains with the same ID
               let trainIDs = [];
@@ -984,6 +993,7 @@ let train: Train = {
                 trains[trainNum][i].onlyOfTrainNum = arr.length <= 1; // this should be an == but edge cases be damned
               });
             })
+    console.log(`[updateTrains] dedupe complete in ${Date.now() - dedupeStartedAt}ms`);
 
     console.log(`[updateTrains] transform complete in ${Date.now() - transformStartedAt}ms`);
 
@@ -1000,12 +1010,14 @@ let train: Train = {
     Object.keys(allStations).forEach((stationKey) => {
       amtrakerCache.setStation(stationKey, allStations[stationKey]);
     });
+    console.log(`[updateTrains] station cache swap complete in ${Date.now() - transformStartedAt}ms`);
 
     // Guard: avoid clobbering last-good cache with an empty/invalid pull
     const trainCount = Object.values(trains).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
     if (trainCount > 0) {
       amtrakerCache.setTrains(trains);
       console.log(`set trains cache (records=${trainCount})`);
+      console.log(`[updateTrains] train cache swap complete in ${Date.now() - transformStartedAt}ms`);
     } else {
       console.log("skip cache update: no trains in pull (keeping last-good)");
       shitsFucked = true;

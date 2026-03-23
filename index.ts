@@ -143,6 +143,7 @@ let AllTTMTrains = "";
 let trainPlatforms = {};
 let brightlineData = {};
 let brightlinePlatforms = {};
+let updateTrainsInProgress = false;
 
 //https://stackoverflow.com/questions/196972/convert-string-to-title-case-with-javascript
 const title = (str: string) => {
@@ -459,64 +460,80 @@ const parseRawStation = (rawStation: RawStation, rawTrainNum: String = "", debug
 };
 
 const updateTrains = async () => {
+  if (updateTrainsInProgress) {
+    console.log("Skipping train refresh: previous update still in progress");
+    return;
+  }
+
+  updateTrainsInProgress = true;
+  const startedAt = Date.now();
   console.log("Updating trains...");
   shitsFucked = false;
 
-  // getting allttmtrains for ASMAD
-  fetch(
-    `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
-  )
-    .then((res) => res.text())
-    .then((data) => {
-      AllTTMTrains = data;
-    })
-    .catch((e) => {
-      console.log("AllTTMTrains fetch error");
-    });
+  try {
+    // getting allttmtrains for ASMAD
+    void fetch(
+      `https://maps.amtrak.com/services/MapDataService/stations/AllTTMTrains?${Date.now()}=true`
+    )
+      .then((res) => res.text())
+      .then((data) => {
+        AllTTMTrains = data;
+      })
+      .catch(() => {
+        console.log("AllTTMTrains fetch error");
+      });
 
-try {
-  const platformTxt = await fetchTextWithRetry("https://platformsapi.amtraker.com/stations", {
-    attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "platforms"
-  });
-  trainPlatforms = JSON.parse(platformTxt);
-} catch (e) {
-  console.log("[platforms] failed:", (e as Error).message);
-  trainPlatforms = {};
-}
+    const supportFetchStartedAt = Date.now();
 
- let amtrakAlertsData: any = { trains: {} };
-try {
-    const alertsTxt = await fetchTextWithRetry("https://ttp-alerts-production.up.railway.app/amtrak_alerts", {
-    attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "amtrakAlerts"
-  });
-  amtrakAlertsData = JSON.parse(alertsTxt);
-} catch (e) {
-  console.log("[amtrakAlerts] failed:", (e as Error).message);
-}
+    try {
+      const platformTxt = await fetchTextWithRetry("https://platformsapi.amtraker.com/stations", {
+        attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "platforms"
+      });
+      trainPlatforms = JSON.parse(platformTxt);
+    } catch (e) {
+      console.log("[platforms] failed:", (e as Error).message);
+      trainPlatforms = {};
+    }
 
-try {
-  const blTxt = await fetchTextWithRetry("https://store.transitstat.us/brightline", {
-    attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "brightline"
-  });
-  const rawBrightline = JSON.parse(blTxt);
-  // Ensure a safe shape so downstream code never crashes
-  brightlineData = rawBrightline['v1'] ?? { trains: {}, stations: {}, lastUpdated: null };
-  brightlinePlatforms = rawBrightline['platforms'] ?? {};
-} catch (e) {
-  console.log("[brightline] failed:", (e as Error).message);
-  // Safe fallback shape
-  brightlineData = { trains: {}, stations: {}, lastUpdated: null };
-  brightlinePlatforms = {};
-}
+    let amtrakAlertsData: any = { trains: {} };
+    try {
+      const alertsTxt = await fetchTextWithRetry("https://ttp-alerts-production.up.railway.app/amtrak_alerts", {
+        attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "amtrakAlerts"
+      });
+      amtrakAlertsData = JSON.parse(alertsTxt);
+    } catch (e) {
+      console.log("[amtrakAlerts] failed:", (e as Error).message);
+    }
 
-  let trains: TrainResponse = {};
-  let allStations: StationResponse = {};
+    try {
+      const blTxt = await fetchTextWithRetry("https://store.transitstat.us/brightline", {
+        attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "brightline"
+      });
+      const rawBrightline = JSON.parse(blTxt);
+      // Ensure a safe shape so downstream code never crashes
+      brightlineData = rawBrightline['v1'] ?? { trains: {}, stations: {}, lastUpdated: null };
+      brightlinePlatforms = rawBrightline['platforms'] ?? {};
+    } catch (e) {
+      console.log("[brightline] failed:", (e as Error).message);
+      // Safe fallback shape
+      brightlineData = { trains: {}, stations: {}, lastUpdated: null };
+      brightlinePlatforms = {};
+    }
 
-    fetchViaForCleaning()
-    .then((viaData) => {
-    return fetchAmtrakStationsForCleaning().then((stationData) => {
-      console.log("fetched s");
-      (Array.isArray(stationData) ? stationData : rawStations.features).forEach((station) => {
+    console.log(`[updateTrains] support fetches complete in ${Date.now() - supportFetchStartedAt}ms`);
+
+    let trains: TrainResponse = {};
+    let allStations: StationResponse = {};
+
+    const coreFetchStartedAt = Date.now();
+    const viaData = await fetchViaForCleaning();
+    const stationData = await fetchAmtrakStationsForCleaning();
+    console.log(`[updateTrains] core fetches complete in ${Date.now() - coreFetchStartedAt}ms`);
+    console.log("fetched s");
+
+    const transformStartedAt = Date.now();
+
+    (Array.isArray(stationData) ? stationData : rawStations.features).forEach((station) => {
           const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
 
           const stationObj = {
@@ -538,16 +555,17 @@ try {
           amtrakerCache.setStation(actualCode, stationObj);
         });
 
-        fetchAmtrakTrainsForCleaning()
-          .then((amtrakData) => {
-            console.log("fetched t");
-            const nowCleaning: number = new Date().valueOf();
+    const amtrakFetchStartedAt = Date.now();
+    const amtrakData = await fetchAmtrakTrainsForCleaning();
+    console.log(`[updateTrains] amtrak fetch complete in ${Date.now() - amtrakFetchStartedAt}ms`);
+    console.log("fetched t");
+    const nowCleaning: number = new Date().valueOf();
 
-            staleData.activeTrains = 0;
-            staleData.avgLastUpdate = 0;
-            staleData.stale = false;
+    staleData.activeTrains = 0;
+    staleData.avgLastUpdate = 0;
+    staleData.stale = false;
 
-            Object.keys(brightlineData['trains']).forEach((trainNum) => {
+    Object.keys(brightlineData['trains']).forEach((trainNum) => {
   const rawTrainData = brightlineData['trains'][trainNum];
 
   if (!rawTrainData.realTime) return; // train is scheduled and should not be shown on Amtraker
@@ -648,7 +666,7 @@ try {
   }
 })
 
-            Object.keys(viaData).forEach((trainNum) => {
+    Object.keys(viaData).forEach((trainNum) => {
               const rawTrainData = viaData[trainNum];
               const actualTrainNum = "v" + trainNum.split(" ")[0];
               if (!rawTrainData.departed) return; //train doesn't exist
@@ -804,7 +822,7 @@ let train: Train = {
               }
             });
 
-            amtrakData.forEach((property) => {
+    amtrakData.forEach((property) => {
               let rawTrainData = property.properties;
 
               let rawStations: Array<RawStation> = [];
@@ -951,8 +969,8 @@ let train: Train = {
               }
             });
 
-            // setting onlyOfTrainNum and deduplicating at the same time
-            Object.keys(trains).forEach((trainNum) => {
+    // setting onlyOfTrainNum and deduplicating at the same time
+    Object.keys(trains).forEach((trainNum) => {
               // deduplicating trains with the same ID
               let trainIDs = [];
               trains[trainNum] = trains[trainNum].filter((train) => {
@@ -967,38 +985,38 @@ let train: Train = {
               });
             })
 
-            staleData.avgLastUpdate =
-              staleData.avgLastUpdate / staleData.activeTrains;
+    console.log(`[updateTrains] transform complete in ${Date.now() - transformStartedAt}ms`);
 
-            if (staleData.avgLastUpdate > 1000 * 60 * 20) {
-              console.log("Data is stale, setting...");
-              staleData.stale = true;
-            }
+    staleData.avgLastUpdate =
+      staleData.activeTrains > 0
+        ? staleData.avgLastUpdate / staleData.activeTrains
+        : 0;
 
-            Object.keys(allStations).forEach((stationKey) => {
-          amtrakerCache.setStation(stationKey, allStations[stationKey]);
-        });
+    if (staleData.avgLastUpdate > 1000 * 60 * 20) {
+      console.log("Data is stale, setting...");
+      staleData.stale = true;
+    }
 
-      // Guard: avoid clobbering last-good cache with an empty/invalid pull
-      const trainCount = Object.values(trains).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
-      if (trainCount > 0) {
-       amtrakerCache.setTrains(trains);
-        console.log(`set trains cache (records=${trainCount})`);
-      } else {
+    Object.keys(allStations).forEach((stationKey) => {
+      amtrakerCache.setStation(stationKey, allStations[stationKey]);
+    });
+
+    // Guard: avoid clobbering last-good cache with an empty/invalid pull
+    const trainCount = Object.values(trains).reduce((sum, arr) => sum + (arr?.length ?? 0), 0);
+    if (trainCount > 0) {
+      amtrakerCache.setTrains(trains);
+      console.log(`set trains cache (records=${trainCount})`);
+    } else {
       console.log("skip cache update: no trains in pull (keeping last-good)");
       shitsFucked = true;
-      }
-        })
-          .catch((e) => {
-            console.log("Error fetching train data:", e);
-            shitsFucked = true;
-          });
-      });
-    })
-    .catch((e) => {
-      console.log("Error fetching station data:", e);
-      shitsFucked = true;
-    });
+    }
+  } catch (e) {
+    console.log("Error updating trains:", e);
+    shitsFucked = true;
+  } finally {
+    console.log(`[updateTrains] total ${Date.now() - startedAt}ms`);
+    updateTrainsInProgress = false;
+  }
 };
 
 updateTrains();

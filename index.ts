@@ -485,15 +485,18 @@ const updateTrains = async () => {
 
     const supportFetchStartedAt = Date.now();
 
-    try {
-      const platformTxt = await fetchTextWithRetry("https://platformsapi.amtraker.com/stations", {
-        attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "platforms"
-      });
-      trainPlatforms = JSON.parse(platformTxt);
-    } catch (e) {
-      console.log("[platforms] failed:", (e as Error).message);
-      trainPlatforms = {};
-    }
+    // Commented out platform fetch to stop depending on platformsapi.amtraker.com.
+    // Leave trainPlatforms empty so the rest of the pipeline continues to work.
+    // try {
+    //   const platformTxt = await fetchTextWithRetry("https://platformsapi.amtraker.com/stations", {
+    //     attempts: 5, baseDelayMs: 600, timeoutMs: 8000, tag: "platforms"
+    //   });
+    //   trainPlatforms = JSON.parse(platformTxt);
+    // } catch (e) {
+    //   console.log("[platforms] failed:", (e as Error).message);
+    //   trainPlatforms = {};
+    // }
+    trainPlatforms = {};
 
     let amtrakAlertsData: any = { trains: {} };
     try {

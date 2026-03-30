@@ -532,7 +532,7 @@ const updateTrains = async () => {
     const viaData = await fetchViaForCleaning();
     const stationData = await fetchAmtrakStationsForCleaning();
     console.log(`[updateTrains] core fetches complete in ${Date.now() - coreFetchStartedAt}ms`);
-    console.log("fetched s");
+    console.log("fetched stations");
 
     const transformStartedAt = Date.now();
 
@@ -563,7 +563,7 @@ const updateTrains = async () => {
     const amtrakFetchStartedAt = Date.now();
     const amtrakData = await fetchAmtrakTrainsForCleaning();
     console.log(`[updateTrains] amtrak fetch complete in ${Date.now() - amtrakFetchStartedAt}ms`);
-    console.log("fetched t");
+    console.log("fetched trains");
     const nowCleaning: number = new Date().valueOf();
 
     staleData.activeTrains = 0;

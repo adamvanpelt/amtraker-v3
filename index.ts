@@ -857,22 +857,28 @@ let train: Train = {
                 const actualCode = amtrakStationCodeReplacements[station.code] ?? station.code;
 
                 if (!allStations[actualCode]) {
-                  if (!amtrakerCache.stationExists(actualCode)) {
-                    amtrakerCache.setStation(actualCode, {
-                      name: stationMetaData.stationNames[station.code],
-                      code: actualCode,
-                      tz: stationMetaData.timeZones[station.code],
-                      lat: 0,
-                      lon: 0,
-                      hasAddress: false,
-                      address1: "",
-                      address2: "",
-                      city: "",
-                      state: "",
-                      zip: 0,
-                      trains: [],
-                    });
-                  }
+                  const fallbackStation =
+                    amtrakerCache.stationExists(actualCode)
+                      ? amtrakerCache.getStation(actualCode)
+                      : {
+                          name: stationMetaData.stationNames[station.code],
+                          code: actualCode,
+                          tz: stationMetaData.timeZones[station.code],
+                          lat: 0,
+                          lon: 0,
+                          hasAddress: false,
+                          address1: "",
+                          address2: "",
+                          city: "",
+                          state: "",
+                          zip: 0,
+                          trains: [],
+                        };
+
+                  allStations[actualCode] = {
+                    ...fallbackStation,
+                    trains: [...(fallbackStation?.trains ?? [])],
+                  };
                 }
 
                 const result = parseRawStation(station, rawTrainData.TrainNum); //, rawTrainData.TrainNum == "784");

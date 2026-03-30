@@ -152,7 +152,12 @@ const calculateIconColor = (train: Train, allStations: StationResponse, activeSt
 
     return calculateColorInRange(minutesLate, routeMaxTimeFrameLate);
   } catch (e) {
-    console.log('calculating train color error:', train)
+    console.log(
+      "[calculateIconColor] failed",
+      train.trainID,
+      train.eventCode,
+      (e as Error).message
+    );
     return {
       color: '#212529',
       text: '#ffffff',

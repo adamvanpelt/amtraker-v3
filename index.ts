@@ -187,7 +187,7 @@ const ccDegToCardinal = (deg) => {
   return "N";
 };
 
-const providerStaleThresholdMs = 1000 * 60 * 20;
+const providerStaleThresholdMs = 1000 * 60 * 15;
 
 const createProviderStatus = () => ({
   AMTK: {

@@ -35,9 +35,8 @@ type FetchFn<T> = (url: string) => Promise<T>;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function withTimeout(ms: number, signal?: AbortSignal) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort("timeout"), ms);
   const composite = new AbortController();
+  const timeout = setTimeout(() => composite.abort("timeout"), ms);
   const onAbort = () => composite.abort(signal?.reason ?? "aborted");
   signal?.addEventListener("abort", onAbort, { once: true });
 
@@ -46,7 +45,6 @@ function withTimeout(ms: number, signal?: AbortSignal) {
     clear: () => {
       clearTimeout(timeout);
       signal?.removeEventListener("abort", onAbort);
-      controller.signal.aborted || controller.abort();
     },
   };
 }

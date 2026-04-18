@@ -250,9 +250,13 @@ const finalizeProviderStatus = (
       status.activeTrains > 0
         ? status.avgLastUpdate / status.activeTrains
         : 0;
+    const newestUpdateAge = status.lastUpdated
+      ? Date.now() - new Date(status.lastUpdated).valueOf()
+      : Infinity;
+
     status.stale =
       status.activeTrains === 0 ||
-      status.avgLastUpdate > providerStaleThresholdMs;
+      newestUpdateAge > providerStaleThresholdMs;
     status.ok = !status.stale;
   });
 

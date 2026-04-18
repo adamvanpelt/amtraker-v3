@@ -261,6 +261,48 @@ const finalizeProviderStatus = (
   providerStatus = providerFreshness;
 };
 
+const countProviderTrains = (trains: TrainResponse, providerShort: string) =>
+  Object.values(trains).reduce(
+    (sum, trainsForNumber) =>
+      sum +
+      (trainsForNumber?.filter((train) => train.providerShort === providerShort)
+        .length ?? 0),
+    0
+  );
+
+const mergeCachedProviderTrains = (
+  target: TrainResponse,
+  cached: TrainResponse,
+  providerShort: string,
+  nowCleaning: number,
+  providerFreshness: ReturnType<typeof createProviderStatus>
+) => {
+  let merged = 0;
+
+  Object.keys(cached).forEach((trainNum) => {
+    const cachedProviderTrains = cached[trainNum]?.filter(
+      (train) => train.providerShort === providerShort
+    );
+    if (!cachedProviderTrains?.length) return;
+
+    if (!target[trainNum]) target[trainNum] = [];
+
+    cachedProviderTrains.forEach((cachedTrain) => {
+      if (target[trainNum].some((train) => train.trainID === cachedTrain.trainID)) {
+        return;
+      }
+
+      target[trainNum].push(cachedTrain);
+      recordFreshness(cachedTrain, nowCleaning, providerFreshness);
+      merged++;
+    });
+  });
+
+  if (merged > 0) {
+    console.log(`[updateTrains] reused ${merged} cached ${providerShort} trains`);
+  }
+};
+
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
     crypto.lib.CipherParams.create({
@@ -631,6 +673,7 @@ const updateTrains = async () => {
     console.log("fetched stations");
 
     const transformStartedAt = Date.now();
+    const cachedTrains = amtrakerCache.getTrains();
 
     (Array.isArray(stationData) ? stationData : rawStations.features).forEach((station) => {
           const actualCode = amtrakStationCodeReplacements[station.properties.Code] ?? station.properties.Code;
@@ -661,6 +704,8 @@ const updateTrains = async () => {
     console.log(`[updateTrains] amtrak fetch complete in ${Date.now() - amtrakFetchStartedAt}ms`);
     console.log("fetched trains");
     const nowCleaning: number = new Date().valueOf();
+    const viaFetchReturnedEmpty = Object.keys(viaData).length === 0;
+    const amtrakFetchReturnedEmpty = amtrakData.length === 0;
 
     staleData.activeTrains = 0;
     staleData.avgLastUpdate = 0;
@@ -768,11 +813,13 @@ const updateTrains = async () => {
 
     const viaTransformStartedAt = Date.now();
     Object.keys(viaData).forEach((trainNum) => {
+      try {
               const rawTrainData = viaData[trainNum];
               const actualTrainNum = "v" + trainNum.split(" ")[0];
               if (!rawTrainData.departed) return; //train doesn't exist
               if (rawTrainData.arrived) return; // keep completed trips from posing as fresh active data
               if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
+              if (!Array.isArray(rawTrainData.times) || rawTrainData.times.length === 0) return;
 
               const sortedStations = rawTrainData.times.sort(
                 (a, b) =>
@@ -918,11 +965,15 @@ let train: Train = {
               trains[actualTrainNum].push(train);
 
               recordFreshness(train, nowCleaning, liveProviderStatus);
+      } catch (e) {
+        console.log("[viaTransform] failed for train", trainNum, (e as Error).message);
+      }
             });
     console.log(`[updateTrains] via transform complete in ${Date.now() - viaTransformStartedAt}ms`);
 
     const amtrakTransformStartedAt = Date.now();
     amtrakData.forEach((property) => {
+      try {
               let rawTrainData = property.properties;
 
               let rawStations: Array<RawStation> = [];
@@ -1069,8 +1120,25 @@ let train: Train = {
               trains[rawTrainData.TrainNum].push(train);
 
               recordFreshness(train, nowCleaning, liveProviderStatus);
+      } catch (e) {
+        console.log("[amtrakTransform] failed:", (e as Error).message);
+      }
             });
     console.log(`[updateTrains] amtrak transform complete in ${Date.now() - amtrakTransformStartedAt}ms`);
+
+    if (
+      (viaFetchReturnedEmpty || countProviderTrains(trains, "VIA") === 0) &&
+      countProviderTrains(cachedTrains, "VIA") > 0
+    ) {
+      mergeCachedProviderTrains(trains, cachedTrains, "VIA", nowCleaning, liveProviderStatus);
+    }
+
+    if (
+      (amtrakFetchReturnedEmpty || countProviderTrains(trains, "AMTK") === 0) &&
+      countProviderTrains(cachedTrains, "AMTK") > 0
+    ) {
+      mergeCachedProviderTrains(trains, cachedTrains, "AMTK", nowCleaning, liveProviderStatus);
+    }
 
     // setting onlyOfTrainNum and deduplicating at the same time
     const dedupeStartedAt = Date.now();
@@ -1252,6 +1320,21 @@ Bun.serve({
 
       if (trainNum === undefined) {
         console.log("all trains");
+        const trainCount = Object.values(trains).reduce(
+          (sum, arr) => sum + (arr?.length ?? 0),
+          0
+        );
+
+        if (trainCount === 0) {
+          return new Response(JSON.stringify({ error: "No train data available yet" }), {
+            status: 503,
+            headers: {
+              "Access-Control-Allow-Origin": "*", // CORS
+              "content-type": "application/json",
+            },
+          });
+        }
+
         return new Response(JSON.stringify(trains), {
           headers: {
             "Access-Control-Allow-Origin": "*", // CORS

@@ -124,6 +124,29 @@ let staleData = {
 };
 
 let shitsFucked = false;
+let providerStatus = {
+  AMTK: {
+    avgLastUpdate: 0,
+    activeTrains: 0,
+    stale: true,
+    ok: false,
+    lastUpdated: null as string | null,
+  },
+  VIA: {
+    avgLastUpdate: 0,
+    activeTrains: 0,
+    stale: true,
+    ok: false,
+    lastUpdated: null as string | null,
+  },
+  BLNE: {
+    avgLastUpdate: 0,
+    activeTrains: 0,
+    stale: true,
+    ok: false,
+    lastUpdated: null as string | null,
+  },
+};
 
 const amtrakTrainsURL =
   "https://maps.amtrak.com/services/MapDataService/trains/getTrainsData";
@@ -166,6 +189,78 @@ const ccDegToCardinal = (deg) => {
   return "N";
 };
 
+const providerStaleThresholdMs = 1000 * 60 * 20;
+
+const createProviderStatus = () => ({
+  AMTK: {
+    avgLastUpdate: 0,
+    activeTrains: 0,
+    stale: true,
+    ok: false,
+    lastUpdated: null as string | null,
+  },
+  VIA: {
+    avgLastUpdate: 0,
+    activeTrains: 0,
+    stale: true,
+    ok: false,
+    lastUpdated: null as string | null,
+  },
+  BLNE: {
+    avgLastUpdate: 0,
+    activeTrains: 0,
+    stale: true,
+    ok: false,
+    lastUpdated: null as string | null,
+  },
+});
+
+const recordFreshness = (
+  train: Train,
+  nowCleaning: number,
+  providerFreshness: ReturnType<typeof createProviderStatus>
+) => {
+  if (train.trainState !== "Active") return;
+
+  const provider = train.providerShort as keyof ReturnType<typeof createProviderStatus>;
+  if (!providerFreshness[provider]) return;
+
+  const lastVal = new Date(train.lastValTS).valueOf();
+  if (Number.isNaN(lastVal)) return;
+
+  const age = nowCleaning - lastVal;
+  staleData.avgLastUpdate += age;
+  staleData.activeTrains++;
+
+  providerFreshness[provider].avgLastUpdate += age;
+  providerFreshness[provider].activeTrains++;
+
+  const lastUpdated = providerFreshness[provider].lastUpdated;
+  if (!lastUpdated || lastVal > new Date(lastUpdated).valueOf()) {
+    providerFreshness[provider].lastUpdated = new Date(lastVal).toISOString();
+  }
+};
+
+const finalizeProviderStatus = (
+  providerFreshness: ReturnType<typeof createProviderStatus>
+) => {
+  Object.keys(providerFreshness).forEach((provider) => {
+    const key = provider as keyof ReturnType<typeof createProviderStatus>;
+    const status = providerFreshness[key];
+
+    status.avgLastUpdate =
+      status.activeTrains > 0
+        ? status.avgLastUpdate / status.activeTrains
+        : 0;
+    status.stale =
+      status.activeTrains === 0 ||
+      status.avgLastUpdate > providerStaleThresholdMs;
+    status.ok = !status.stale;
+  });
+
+  providerStatus = providerFreshness;
+};
+
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
     crypto.lib.CipherParams.create({
@@ -181,15 +276,15 @@ const decrypt = (content, key) => {
 };
 
 const fetchAmtrakTrainsForCleaning = async () => {
-  const url = amtrakTrainsURL + `?${Date.now()}=true`;
-  const data = await fetchTextWithRetry(url, {
-    attempts: 5,
-    baseDelayMs: 600,
-    timeoutMs: 9000,
-    tag: "amtrakTrains",
-  });
-
   try {
+    const url = amtrakTrainsURL + `?${Date.now()}=true`;
+    const data = await fetchTextWithRetry(url, {
+      attempts: 5,
+      baseDelayMs: 600,
+      timeoutMs: 9000,
+      tag: "amtrakTrains",
+    });
+
     const mainContent = data.substring(0, data.length - masterSegment);
     const encryptedPrivateKey = data.substr(data.length - masterSegment, data.length);
     const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
@@ -204,40 +299,42 @@ const fetchAmtrakTrainsForCleaning = async () => {
     decryptedTrainData = JSON.stringify(features);
     return features;
   } catch (e) {
-    console.log("[amtrakTrains] decrypt/parse failed:", (e as Error).message);
-    shitsFucked = true;
+    console.log("[amtrakTrains] failed:", (e as Error).message);
     return [];
   }
 };
 
 const fetchAmtrakStationsForCleaning = async () => {
-  const response = await fetch(amtrakStationsURL + `?${Date.now()}=true`);
-  const data = await response.text();
-
-  const mainContent = data.substring(0, data.length - masterSegment);
-  const encryptedPrivateKey = data.substr(
-    data.length - masterSegment,
-    data.length
-  );
-  const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
-  const decrypted = decrypt(mainContent, privateKey);
-
   try {
+    const data = await fetchTextWithRetry(amtrakStationsURL + `?${Date.now()}=true`, {
+      attempts: 5,
+      baseDelayMs: 600,
+      timeoutMs: 9000,
+      tag: "amtrakStations",
+    });
+
+    const mainContent = data.substring(0, data.length - masterSegment);
+    const encryptedPrivateKey = data.substr(
+      data.length - masterSegment,
+      data.length
+    );
+    const privateKey = decrypt(encryptedPrivateKey, publicKey).split("|")[0];
+    const decrypted = decrypt(mainContent, privateKey);
+
     decryptedStationData = JSON.stringify(
       JSON.parse(decrypted)?.StationsDataResponse
     );
 
     const parsed = JSON.parse(decrypted);
-const stationsResp = parsed?.StationsDataResponse;
-const features = stationsResp?.features;
+    const stationsResp = parsed?.StationsDataResponse;
+    const features = stationsResp?.features;
 
-// Keep a useful snapshot
-decryptedStationData = JSON.stringify(stationsResp ?? []);
+    // Keep a useful snapshot
+    decryptedStationData = JSON.stringify(stationsResp ?? []);
 
-// ✅ Always return an array
-return Array.isArray(features) ? features : rawStations.features;
+    return Array.isArray(features) ? features : rawStations.features;
   } catch (e) {
-    //console.log("stations e:", e.toString());
+    console.log("[amtrakStations] failed:", (e as Error).message);
     decryptedStationData = JSON.stringify(rawStations.features);
     return rawStations.features;
   }
@@ -259,8 +356,7 @@ const fetchViaForCleaning = async () => {
     return data;
   } catch (e) {
     console.log("[viaAllData] failed:", (e as Error).message);
-    // Re-throw so updateTrains can mark partial failure but continue with others
-    throw new Error("VIA");
+    return {};
   }
 };
 
@@ -569,6 +665,7 @@ const updateTrains = async () => {
     staleData.activeTrains = 0;
     staleData.avgLastUpdate = 0;
     staleData.stale = false;
+    const liveProviderStatus = createProviderStatus();
 
     const brightlineTransformStartedAt = Date.now();
     Object.keys(brightlineData['trains']).forEach((trainNum) => {
@@ -665,11 +762,7 @@ const updateTrains = async () => {
   if (!trains['b' + trainNum]) trains['b' + trainNum] = [];
   trains['b' + trainNum].push(train);
 
-  if (train.trainState === "Active") {
-    staleData.avgLastUpdate +=
-      nowCleaning - new Date(train.lastValTS).valueOf();
-    staleData.activeTrains++;
-  }
+  recordFreshness(train, nowCleaning, liveProviderStatus);
 })
     console.log(`[updateTrains] brightline transform complete in ${Date.now() - brightlineTransformStartedAt}ms`);
 
@@ -678,6 +771,7 @@ const updateTrains = async () => {
               const rawTrainData = viaData[trainNum];
               const actualTrainNum = "v" + trainNum.split(" ")[0];
               if (!rawTrainData.departed) return; //train doesn't exist
+              if (rawTrainData.arrived) return; // keep completed trips from posing as fresh active data
               if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
 
               const sortedStations = rawTrainData.times.sort(
@@ -823,11 +917,7 @@ let train: Train = {
               if (!trains[actualTrainNum]) trains[actualTrainNum] = [];
               trains[actualTrainNum].push(train);
 
-              if (train.trainState === "Active") {
-                staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.lastValTS).valueOf();
-                staleData.activeTrains++;
-              }
+              recordFreshness(train, nowCleaning, liveProviderStatus);
             });
     console.log(`[updateTrains] via transform complete in ${Date.now() - viaTransformStartedAt}ms`);
 
@@ -978,11 +1068,7 @@ let train: Train = {
               if (!trains[rawTrainData.TrainNum]) trains[rawTrainData.TrainNum] = [];
               trains[rawTrainData.TrainNum].push(train);
 
-              if (train.trainState === "Active") {
-                staleData.avgLastUpdate +=
-                  nowCleaning - new Date(train.lastValTS).valueOf();
-                staleData.activeTrains++;
-              }
+              recordFreshness(train, nowCleaning, liveProviderStatus);
             });
     console.log(`[updateTrains] amtrak transform complete in ${Date.now() - amtrakTransformStartedAt}ms`);
 
@@ -1011,10 +1097,11 @@ let train: Train = {
         ? staleData.avgLastUpdate / staleData.activeTrains
         : 0;
 
-    if (staleData.avgLastUpdate > 1000 * 60 * 20) {
+    if (staleData.avgLastUpdate > providerStaleThresholdMs) {
       console.log("Data is stale, setting...");
       staleData.stale = true;
     }
+    finalizeProviderStatus(liveProviderStatus);
 
     Object.keys(allStations).forEach((stationKey) => {
       amtrakerCache.setStation(stationKey, allStations[stationKey]);
@@ -1068,6 +1155,7 @@ Bun.serve({
           ids,
           shitsFucked,
           staleData,
+          providerStatus,
         }),
         {
           headers: {
@@ -1130,6 +1218,15 @@ Bun.serve({
 
     if (url === "/v3/stale") {
       return new Response(JSON.stringify(staleData), {
+        headers: {
+          "Access-Control-Allow-Origin": "*", // CORS
+          "content-type": "application/json",
+        },
+      });
+    }
+
+    if (url === "/v3/providerStatus") {
+      return new Response(JSON.stringify(providerStatus), {
         headers: {
           "Access-Control-Allow-Origin": "*", // CORS
           "content-type": "application/json",

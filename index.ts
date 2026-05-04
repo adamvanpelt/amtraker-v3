@@ -244,6 +244,11 @@ type ViaGtfsScheduledStop = {
   sequence: number;
 };
 
+type ViaStationRow = {
+  live?: RawViaTrain["times"][number];
+  scheduled?: ViaGtfsScheduledStop;
+};
+
 const parseCsv = (content: string) => {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -311,6 +316,16 @@ const viaGtfsStopTimesByTrip = viaGtfsStopTimes.reduce((acc, stopTime) => {
   acc[stopTime.trip_id].push(stopTime);
   return acc;
 }, {} as Record<string, ViaGtfsStopTime[]>);
+const viaGtfsStopCodesByTrip: Record<string, Set<string>> = Object.fromEntries(
+  Object.entries(viaGtfsStopTimesByTrip).map(([tripId, stopTimes]) => [
+    tripId,
+    new Set(
+      stopTimes
+        .map((stopTime) => viaGtfsStopsById[stopTime.stop_id]?.stop_code)
+        .filter((code): code is string => !!code)
+    ),
+  ])
+);
 
 const viaGtfsTimeToIso = (
   serviceDate: string,
@@ -366,18 +381,45 @@ const findViaGtfsTrip = (rawTrainData: RawViaTrain, trainNum: string) => {
   const candidatesForTrainNumber = viaGtfsTrips.filter(
     (trip) => trip.trip_short_name === shortName
   );
-  const candidates =
-    candidatesForTrainNumber.filter((trip) =>
-      viaGtfsServiceActive(trip.service_id, rawTrainData.instance)
-    ) ?? candidatesForTrainNumber;
-  const usableCandidates =
-    candidates.length > 0 ? candidates : candidatesForTrainNumber;
-
-  return (
-    usableCandidates.find(
-      (trip) => normalizeViaStationName(trip.trip_headsign) === destination
-    ) ?? usableCandidates[0]
+  const liveCodes = new Set(
+    (rawTrainData.times ?? [])
+      .map((time) => time.code)
+      .filter((code): code is string => !!code)
   );
+
+  return candidatesForTrainNumber
+    .map((trip) => {
+      const tripCodes = viaGtfsStopCodesByTrip[trip.trip_id] ?? new Set<string>();
+      const overlap = Array.from(liveCodes).filter((code) =>
+        tripCodes.has(code)
+      ).length;
+      const missingLiveStops = Array.from(liveCodes).filter(
+        (code) => !tripCodes.has(code)
+      ).length;
+
+      return {
+        trip,
+        headsignMatch:
+          normalizeViaStationName(trip.trip_headsign) === destination ? 1 : 0,
+        active: viaGtfsServiceActive(trip.service_id, rawTrainData.instance)
+          ? 1
+          : 0,
+        overlap,
+        missingLiveStops,
+        stopCount: tripCodes.size,
+      };
+    })
+    .sort((a, b) => {
+      if (b.headsignMatch !== a.headsignMatch) {
+        return b.headsignMatch - a.headsignMatch;
+      }
+      if (b.overlap !== a.overlap) return b.overlap - a.overlap;
+      if (a.missingLiveStops !== b.missingLiveStops) {
+        return a.missingLiveStops - b.missingLiveStops;
+      }
+      if (b.active !== a.active) return b.active - a.active;
+      return b.stopCount - a.stopCount;
+    })[0]?.trip;
 };
 
 const getViaGtfsScheduledStops = (
@@ -1082,26 +1124,38 @@ const updateTrains = async () => {
               const liveStationsByCode = new Map(
                 sortedStations.map((station) => [station.code, station])
               );
-              const stationRows: Array<{
-                live?: RawViaTrain["times"][number];
-                scheduled?: ViaGtfsScheduledStop;
-              }> =
+              const viaGtfsScheduledCodes = new Set(
+                viaGtfsScheduledStops.map((scheduled) => scheduled.code)
+              );
+              const stationRows: ViaStationRow[] =
                 viaGtfsScheduledStops.length > 0
                   ? [
-                      ...viaGtfsScheduledStops.map((scheduled) => ({
+                      ...viaGtfsScheduledStops.map((scheduled): ViaStationRow => ({
                         scheduled,
                         live: liveStationsByCode.get(scheduled.code),
                       })),
                       ...sortedStations
                         .filter(
-                          (live) =>
-                            !viaGtfsScheduledStops.some(
-                              (scheduled) => scheduled.code === live.code
-                            )
+                          (live) => !viaGtfsScheduledCodes.has(live.code)
                         )
-                        .map((live) => ({ live })),
-                    ]
-                  : sortedStations.map((live) => ({ live }));
+                        .map((live): ViaStationRow => ({ live })),
+                    ].sort((a, b) => {
+                      const aTime =
+                        a.live?.arrival?.scheduled ??
+                        a.live?.departure?.scheduled ??
+                        a.scheduled?.schArr ??
+                        a.scheduled?.schDep;
+                      const bTime =
+                        b.live?.arrival?.scheduled ??
+                        b.live?.departure?.scheduled ??
+                        b.scheduled?.schArr ??
+                        b.scheduled?.schDep;
+                      const aValue = aTime ? new Date(aTime).valueOf() : Infinity;
+                      const bValue = bTime ? new Date(bTime).valueOf() : Infinity;
+
+                      return aValue - bValue;
+                    })
+                  : sortedStations.map((live): ViaStationRow => ({ live }));
               const destCode =
                 viaStationCodeFromName(rawTrainData.to) ?? lastStation.code;
               const destName =

@@ -165,6 +165,7 @@ let trainPlatforms = {};
 let brightlineData = {};
 let brightlinePlatforms = {};
 let updateTrainsInProgress = false;
+const viaLastKnownCoords: Record<string, [number, number]> = {};
 
 //https://stackoverflow.com/questions/196972/convert-string-to-title-case-with-javascript
 const title = (str: string) => {
@@ -322,6 +323,12 @@ const mergeCachedProviderTrains = (
     console.log(`[updateTrains] reused ${merged} cached ${providerShort} trains`);
   }
 };
+
+const findCachedTrain = (
+  cached: TrainResponse,
+  trainNum: string,
+  trainID: string
+) => cached[trainNum]?.find((train) => train.trainID === trainID);
 
 const decrypt = (content, key) => {
   return crypto.AES.decrypt(
@@ -688,6 +695,7 @@ const updateTrains = async () => {
 
     const coreFetchStartedAt = Date.now();
     const viaData = await fetchViaForCleaning();
+    const viaDataReceivedAt = new Date().toISOString();
     const stationData = await fetchAmtrakStationsForCleaning();
     console.log(`[updateTrains] core fetches complete in ${Date.now() - coreFetchStartedAt}ms`);
     console.log("fetched stations");
@@ -836,6 +844,8 @@ const updateTrains = async () => {
       try {
               const rawTrainData = viaData[trainNum];
               const actualTrainNum = "v" + trainNum.split(" ")[0];
+              const trainID = `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`;
+              const cachedTrain = findCachedTrain(cachedTrains, actualTrainNum, trainID);
               if (!rawTrainData.departed) return; //train doesn't exist
               if (rawTrainData.arrived) return; // keep completed trips from posing as fresh active data
               if (actualTrainNum == "97" || actualTrainNum == "98") return; //covered by amtrak
@@ -864,13 +874,16 @@ const eventCode = trainEventStation?.code;
 const eventCoords = eventCode ? stationMetaData.viaCoords[eventCode] : undefined;
 
 // 1) Use VIA realtime coords if present (most accurate for in-between positions)
-// 2) Else use the chosen event station coords
-// 3) Else fall back to any station we have coords for
-// 4) Else [0, 0]
+// 2) Else keep the last coords VIA sent for this train if we have them
+// 3) Else use the chosen event station coords
+// 4) Else fall back to any station we have coords for
+// 5) Else [0, 0]
 const fromRaw =
   (rawTrainData.lat != null && rawTrainData.lng != null)
     ? [Number(rawTrainData.lat), Number(rawTrainData.lng)] as [number, number]
     : undefined;
+if (fromRaw) viaLastKnownCoords[trainID] = fromRaw;
+const fromLastKnown = viaLastKnownCoords[trainID];
 
 const fromAnyStation = (() => {
   for (const s of sortedStations) {
@@ -880,7 +893,7 @@ const fromAnyStation = (() => {
   return undefined;
 })();
 
-const [safeLat, safeLon] = (fromRaw ?? eventCoords ?? fromAnyStation ?? [0, 0]) as [number, number];
+const [safeLat, safeLon] = (fromRaw ?? fromLastKnown ?? eventCoords ?? fromAnyStation ?? [0, 0]) as [number, number];
 
 // Ensure this exists so the map() below can safely update it
 let trainDelay = 0;
@@ -891,7 +904,7 @@ let train: Train = {
     `${title(rawTrainData.from)}-${title(rawTrainData.to)}`,
   trainNum: `${actualTrainNum}`,
   trainNumRaw: trainNum.split(" ")[0],
-  trainID: `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`,
+  trainID,
   lat: safeLat,
   lon: safeLon,
   trainTimely: "",
@@ -965,9 +978,9 @@ let train: Train = {
   trainState: "Active",
   velocity: (rawTrainData.speed ?? 0) * 0.621371,
   statusMsg: " ",
-  createdAt: rawTrainData.poll ?? new Date().toISOString(),
-  updatedAt: rawTrainData.poll ?? new Date().toISOString(),
-  lastValTS: rawTrainData.poll ?? new Date().toISOString(),
+  createdAt: cachedTrain?.createdAt ?? rawTrainData.poll ?? viaDataReceivedAt,
+  updatedAt: rawTrainData.poll ?? viaDataReceivedAt,
+  lastValTS: rawTrainData.poll ?? viaDataReceivedAt,
   objectID: rawTrainData.OBJECTID,
   provider: "Via",
   providerShort: "VIA",

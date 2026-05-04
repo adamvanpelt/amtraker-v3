@@ -174,6 +174,24 @@ const title = (str: string) => {
   );
 };
 
+const normalizeViaStationName = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+const viaStationCodeFromName = (stationName: string | undefined) => {
+  if (!stationName) return undefined;
+
+  const normalizedStationName = normalizeViaStationName(stationName);
+
+  return Object.entries(stationMetaData.viaStationNames).find(
+    ([, name]) => normalizeViaStationName(name) === normalizedStationName
+  )?.[0];
+};
+
 const ccDegToCardinal = (deg) => {
   const fixedDeg = deg - 45 / 2;
   if (fixedDeg < 0) return "N";
@@ -831,6 +849,10 @@ const updateTrains = async () => {
 
               const firstStation = sortedStations[0];
               const lastStation = sortedStations[sortedStations.length - 1];
+              const destCode =
+                viaStationCodeFromName(rawTrainData.to) ?? lastStation.code;
+              const destName =
+                stationMetaData.viaStationNames[destCode] ?? title(rawTrainData.to);
 
 // Prefer next non-ARR event, else first with known coords, else first
 const trainEventStation =
@@ -937,9 +959,9 @@ let train: Train = {
   origCode: firstStation.code,
   originTZ: stationMetaData.viatimeZones[firstStation.code] ?? "America/Toronto",
   origName: stationMetaData.viaStationNames[firstStation.code],
-  destCode: lastStation.code,
-  destTZ: stationMetaData.viatimeZones[lastStation.code] ?? "America/Toronto",
-  destName: stationMetaData.viaStationNames[lastStation.code],
+  destCode,
+  destTZ: stationMetaData.viatimeZones[destCode] ?? "America/Toronto",
+  destName,
   trainState: "Active",
   velocity: (rawTrainData.speed ?? 0) * 0.621371,
   statusMsg: " ",

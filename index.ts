@@ -36,8 +36,8 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function withTimeout(ms: number, signal?: AbortSignal) {
   const composite = new AbortController();
-  const timeout = setTimeout(() => composite.abort("timeout"), ms);
-  const onAbort = () => composite.abort(signal?.reason ?? "aborted");
+  const timeout = setTimeout(() => composite.abort(), ms);
+  const onAbort = () => composite.abort();
   signal?.addEventListener("abort", onAbort, { once: true });
 
   return {
@@ -191,6 +191,225 @@ const viaStationCodeFromName = (stationName: string | undefined) => {
   return Object.entries(stationMetaData.viaStationNames).find(
     ([, name]) => normalizeViaStationName(name) === normalizedStationName
   )?.[0];
+};
+
+type ViaGtfsStop = {
+  stop_id: string;
+  stop_code: string;
+  stop_name: string;
+  stop_timezone: string;
+};
+
+type ViaGtfsTrip = {
+  route_id: string;
+  service_id: string;
+  trip_id: string;
+  trip_short_name: string;
+  trip_headsign: string;
+};
+
+type ViaGtfsStopTime = {
+  trip_id: string;
+  arrival_time: string;
+  departure_time: string;
+  stop_id: string;
+  stop_sequence: string;
+};
+
+type ViaGtfsCalendar = {
+  service_id: string;
+  start_date: string;
+  end_date: string;
+  monday: string;
+  tuesday: string;
+  wednesday: string;
+  thursday: string;
+  friday: string;
+  saturday: string;
+  sunday: string;
+};
+
+type ViaGtfsCalendarDate = {
+  service_id: string;
+  date: string;
+  exception_type: string;
+};
+
+type ViaGtfsScheduledStop = {
+  code: string;
+  name: string;
+  tz: string;
+  schArr?: string;
+  schDep?: string;
+  sequence: number;
+};
+
+const parseCsv = (content: string) => {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    const next = content[i + 1];
+
+    if (inQuotes) {
+      if (char === '"' && next === '"') {
+        field += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = false;
+      } else {
+        field += char;
+      }
+    } else if (char === '"') {
+      inQuotes = true;
+    } else if (char === ",") {
+      row.push(field);
+      field = "";
+    } else if (char === "\n") {
+      row.push(field.replace(/\r$/, ""));
+      rows.push(row);
+      row = [];
+      field = "";
+    } else {
+      field += char;
+    }
+  }
+
+  if (field || row.length > 0) {
+    row.push(field.replace(/\r$/, ""));
+    rows.push(row);
+  }
+
+  const headers = rows.shift() ?? [];
+  return rows
+    .filter((r) => r.some((value) => value !== ""))
+    .map((r) =>
+      Object.fromEntries(headers.map((header, i) => [header, r[i] ?? ""]))
+    );
+};
+
+const readViaGtfsCsv = <T>(filename: string) =>
+  parseCsv(
+    fs.readFileSync(`./data/viarail-gtfs/${filename}`, { encoding: "utf8" })
+  ) as T[];
+
+const viaGtfsAgencyTimezone = "America/Toronto";
+const viaGtfsStops = readViaGtfsCsv<ViaGtfsStop>("stops.txt");
+const viaGtfsTrips = readViaGtfsCsv<ViaGtfsTrip>("trips.txt");
+const viaGtfsStopTimes = readViaGtfsCsv<ViaGtfsStopTime>("stop_times.txt");
+const viaGtfsCalendar = readViaGtfsCsv<ViaGtfsCalendar>("calendar.txt");
+const viaGtfsCalendarDates =
+  readViaGtfsCsv<ViaGtfsCalendarDate>("calendar_dates.txt");
+const viaGtfsStopsById = Object.fromEntries(
+  viaGtfsStops.map((stop) => [stop.stop_id, stop])
+);
+const viaGtfsStopTimesByTrip = viaGtfsStopTimes.reduce((acc, stopTime) => {
+  if (!acc[stopTime.trip_id]) acc[stopTime.trip_id] = [];
+  acc[stopTime.trip_id].push(stopTime);
+  return acc;
+}, {} as Record<string, ViaGtfsStopTime[]>);
+
+const viaGtfsTimeToIso = (
+  serviceDate: string,
+  gtfsTime: string | undefined
+) => {
+  if (!serviceDate || !gtfsTime) return undefined;
+
+  const [hours, minutes, seconds] = gtfsTime.split(":").map(Number);
+  if ([hours, minutes, seconds].some((value) => Number.isNaN(value))) {
+    return undefined;
+  }
+
+  return moment
+    .tz(serviceDate, "YYYY-MM-DD", viaGtfsAgencyTimezone)
+    .startOf("day")
+    .add(hours, "hours")
+    .add(minutes, "minutes")
+    .add(seconds, "seconds")
+    .toISOString();
+};
+
+const viaGtfsServiceDate = (serviceDate: string) =>
+  serviceDate.replace(/-/g, "");
+
+const viaGtfsServiceActive = (serviceId: string, serviceDate: string) => {
+  const dateKey = viaGtfsServiceDate(serviceDate);
+  const exception = viaGtfsCalendarDates.find(
+    (calendarDate) =>
+      calendarDate.service_id === serviceId && calendarDate.date === dateKey
+  );
+
+  if (exception?.exception_type === "1") return true;
+  if (exception?.exception_type === "2") return false;
+
+  const calendar = viaGtfsCalendar.find(
+    (service) => service.service_id === serviceId
+  );
+  if (!calendar || dateKey < calendar.start_date || dateKey > calendar.end_date) {
+    return false;
+  }
+
+  const dayName = moment
+    .tz(serviceDate, "YYYY-MM-DD", viaGtfsAgencyTimezone)
+    .format("dddd")
+    .toLowerCase() as keyof ViaGtfsCalendar;
+
+  return calendar[dayName] === "1";
+};
+
+const findViaGtfsTrip = (rawTrainData: RawViaTrain, trainNum: string) => {
+  const shortName = trainNum.split(" ")[0];
+  const destination = normalizeViaStationName(rawTrainData.to);
+  const candidatesForTrainNumber = viaGtfsTrips.filter(
+    (trip) => trip.trip_short_name === shortName
+  );
+  const candidates =
+    candidatesForTrainNumber.filter((trip) =>
+      viaGtfsServiceActive(trip.service_id, rawTrainData.instance)
+    ) ?? candidatesForTrainNumber;
+  const usableCandidates =
+    candidates.length > 0 ? candidates : candidatesForTrainNumber;
+
+  return (
+    usableCandidates.find(
+      (trip) => normalizeViaStationName(trip.trip_headsign) === destination
+    ) ?? usableCandidates[0]
+  );
+};
+
+const getViaGtfsScheduledStops = (
+  rawTrainData: RawViaTrain,
+  trainNum: string
+): ViaGtfsScheduledStop[] => {
+  const trip = findViaGtfsTrip(rawTrainData, trainNum);
+  if (!trip) return [];
+
+  const serviceDate = rawTrainData.instance;
+  return (viaGtfsStopTimesByTrip[trip.trip_id] ?? [])
+    .slice()
+    .sort((a, b) => Number(a.stop_sequence) - Number(b.stop_sequence))
+    .map((stopTime): ViaGtfsScheduledStop | null => {
+      const stop = viaGtfsStopsById[stopTime.stop_id];
+      if (!stop?.stop_code) return null;
+
+      const tz =
+        stop.stop_timezone ??
+        stationMetaData.viatimeZones[stop.stop_code] ??
+        "America/Toronto";
+
+      return {
+        code: stop.stop_code,
+        name: stationMetaData.viaStationNames[stop.stop_code] ?? stop.stop_name,
+        tz,
+        schArr: viaGtfsTimeToIso(serviceDate, stopTime.arrival_time),
+        schDep: viaGtfsTimeToIso(serviceDate, stopTime.departure_time),
+        sequence: Number(stopTime.stop_sequence),
+      };
+    })
+    .filter((stop): stop is ViaGtfsScheduledStop => stop !== null);
 };
 
 const ccDegToCardinal = (deg) => {
@@ -859,6 +1078,30 @@ const updateTrains = async () => {
 
               const firstStation = sortedStations[0];
               const lastStation = sortedStations[sortedStations.length - 1];
+              const viaGtfsScheduledStops = getViaGtfsScheduledStops(rawTrainData, trainNum);
+              const liveStationsByCode = new Map(
+                sortedStations.map((station) => [station.code, station])
+              );
+              const stationRows: Array<{
+                live?: RawViaTrain["times"][number];
+                scheduled?: ViaGtfsScheduledStop;
+              }> =
+                viaGtfsScheduledStops.length > 0
+                  ? [
+                      ...viaGtfsScheduledStops.map((scheduled) => ({
+                        scheduled,
+                        live: liveStationsByCode.get(scheduled.code),
+                      })),
+                      ...sortedStations
+                        .filter(
+                          (live) =>
+                            !viaGtfsScheduledStops.some(
+                              (scheduled) => scheduled.code === live.code
+                            )
+                        )
+                        .map((live) => ({ live })),
+                    ]
+                  : sortedStations.map((live) => ({ live }));
               const destCode =
                 viaStationCodeFromName(rawTrainData.to) ?? lastStation.code;
               const destName =
@@ -910,14 +1153,20 @@ let train: Train = {
   trainTimely: "",
   iconColor: '#212529',
   textColor: '#ffffff',
-  stations: sortedStations.map((station) => {
-    if (!allStations[station.code]) {
-      allStations[station.code] = {
-        name: stationMetaData.viaStationNames[station.code],
-        code: station.code,
-        tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
-        lat: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][0] : 0,
-        lon: stationMetaData.viaCoords[station.code] ? stationMetaData.viaCoords[station.code][1] : 0,
+  stations: stationRows.map(({ live, scheduled }) => {
+    const code = live?.code ?? scheduled?.code ?? "";
+    const name =
+      stationMetaData.viaStationNames[code] ?? live?.station ?? scheduled?.name ?? code;
+    const tz =
+      stationMetaData.viatimeZones[code] ?? scheduled?.tz ?? "America/Toronto";
+
+    if (!allStations[code]) {
+      allStations[code] = {
+        name,
+        code,
+        tz,
+        lat: stationMetaData.viaCoords[code] ? stationMetaData.viaCoords[code][0] : 0,
+        lon: stationMetaData.viaCoords[code] ? stationMetaData.viaCoords[code][1] : 0,
         hasAddress: false,
         address1: "",
         address2: "",
@@ -928,39 +1177,47 @@ let train: Train = {
       };
     }
 
-    allStations[station.code].trains.push(
+    allStations[code].trains.push(
       `${actualTrainNum}-${rawTrainData.instance.split("-")[2]}`
     );
 
     // Update delay when VIA gives an estimated & scheduled arrival
-    if (station.arrival?.estimated && station.arrival?.scheduled) {
+    if (live?.arrival?.estimated && live?.arrival?.scheduled) {
       trainDelay =
-        new Date(station.arrival.estimated).valueOf() -
-        new Date(station.arrival.scheduled).valueOf();
+        new Date(live.arrival.estimated).valueOf() -
+        new Date(live.arrival.scheduled).valueOf();
     }
 
     // Safer field access
-    const baseArr = (station.arrival ?? station.departure);
-    const baseDep = (station.departure ?? station.arrival);
+    const baseArr = live ? (live.arrival ?? live.departure) : undefined;
+    const baseDep = live ? (live.departure ?? live.arrival) : undefined;
     const estArr = baseArr?.estimated;
     const estDep = baseDep?.estimated;
+    const schArr = baseArr?.scheduled ?? scheduled?.schArr;
+    const schDep = baseDep?.scheduled ?? scheduled?.schDep;
 
     return {
-      name: stationMetaData.viaStationNames[station.code],
-      code: station.code,
-      tz: stationMetaData.viatimeZones[station.code] ?? "America/Toronto",
+      name,
+      code,
+      tz,
       bus: false,
-      schArr: baseArr?.scheduled,
-      schDep: baseDep?.scheduled,
+      schArr,
+      schDep,
       arr:
-        estArr ??
-        new Date(new Date(baseArr?.scheduled ?? Date.now()).valueOf() + trainDelay),
+        live && estArr
+          ? estArr
+          : live && baseArr?.scheduled
+            ? new Date(new Date(baseArr.scheduled).valueOf() + trainDelay).toISOString()
+            : undefined,
       dep:
-        estDep ??
-        new Date(new Date(baseDep?.scheduled ?? Date.now()).valueOf() + trainDelay),
+        live && estDep
+          ? estDep
+          : live && baseDep?.scheduled
+            ? new Date(new Date(baseDep.scheduled).valueOf() + trainDelay).toISOString()
+            : undefined,
       arrCmnt: "",
       depCmnt: "",
-      status: station.eta === "ARR" ? "Departed" : "Enroute",
+      status: live?.eta === "ARR" ? "Departed" : "Enroute",
       stopIconColor: "#212529",
       platform: "",
     };
@@ -981,7 +1238,7 @@ let train: Train = {
   createdAt: cachedTrain?.createdAt ?? rawTrainData.poll ?? viaDataReceivedAt,
   updatedAt: rawTrainData.poll ?? viaDataReceivedAt,
   lastValTS: rawTrainData.poll ?? viaDataReceivedAt,
-  objectID: rawTrainData.OBJECTID,
+  objectID: (rawTrainData as any).OBJECTID,
   provider: "Via",
   providerShort: "VIA",
   onlyOfTrainNum: true,
